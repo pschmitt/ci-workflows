@@ -1,0 +1,81 @@
+# Pin a release's signed browser packages for the Nix package: write the
+# version and the SHA-256 of the release assets to browser/packages/metadata.json
+# on the default branch. The hashes come from the release itself, so this also
+# re-pins an existing release (workflow_dispatch of the caller).
+name: pin-release
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to pin (vX.Y.Z)
+        type: string
+        required: true
+      firefox-asset:
+        description: Release asset name of the XPI, with {version} for the version
+        type: string
+        required: true
+      chromium-asset:
+        description: Release asset name of the CRX, with {version} for the version
+        type: string
+        required: true
+      metadata:
+        type: string
+        default: browser/packages/metadata.json
+permissions:
+  contents: write
+jobs:
+  pin:
+    name: Pin signed browser packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Commit the pin
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          FIREFOX_ASSET: ${{ inputs.firefox-asset }}
+          CHROMIUM_ASSET: ${{ inputs.chromium-asset }}
+          METADATA: ${{ inputs.metadata }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          firefox_asset="${FIREFOX_ASSET//\{version\}/$version}"
+          chromium_asset="${CHROMIUM_ASSET//\{version\}/$version}"
+          release_json="$(gh release view "$TAG" --json assets)"
+
+          digest_for() {
+            local digest
+            digest="$(jq -er --arg name "$1" '.assets[] | select(.name == $name) | .digest' <<< "$release_json")"
+            echo "${digest#sha256:}"
+          }
+
+          jq --arg version "$version" \
+             --arg firefox "$(digest_for "$firefox_asset")" \
+             --arg chromium "$(digest_for "$chromium_asset")" \
+            '.version = $version | .firefoxSha256 = $firefox | .chromiumSha256 = $chromium' \
+            "$METADATA" > "$RUNNER_TEMP/metadata.json"
+          cp "$RUNNER_TEMP/metadata.json" "$METADATA"
+
+          if git diff --quiet -- "$METADATA"
+          then
+            echo "The pin for $TAG is already on $BRANCH."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "release: pin signed browser extension $TAG" -- "$METADATA"
+          for attempt in 1 2 3 4 5
+          do
+            if git push origin "HEAD:$BRANCH"
+            then
+              exit 0
+            fi
+            sleep $((attempt * 10))
+            git pull --rebase origin "$BRANCH"
+          done
+          echo "::error::$BRANCH kept moving; pin $TAG by hand."
+          exit 1

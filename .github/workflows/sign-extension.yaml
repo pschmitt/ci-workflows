@@ -1,0 +1,142 @@
+# Sign a repository's browser extension for a version tag: Firefox through AMO
+# (unlisted) and Chromium as a CRX3 with a stable key. AMO signs a version only
+# once, so a run first reuses the signed packages already attached to the tag's
+# release (when they match the source) and only signs what is missing.
+#
+# The caller provides a build command that writes the unpacked extensions to
+# `firefox-dir` and `chromium-dir`, and receives a `browser-extensions`
+# artifact with the signed packages under their release names.
+name: sign-extension
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Version tag to sign (vX.Y.Z)
+        type: string
+        required: true
+      firefox-asset:
+        description: Release asset name of the XPI, with {version} for the version
+        type: string
+        required: true
+      chromium-asset:
+        description: Release asset name of the CRX, with {version} for the version
+        type: string
+        required: true
+      build-command:
+        type: string
+        default: python3 browser/build.py
+      firefox-dir:
+        type: string
+        default: browser/dist/firefox
+      chromium-dir:
+        type: string
+        default: browser/dist/chromium
+      sign:
+        description: Sign missing packages; without it a mismatch is an error
+        type: boolean
+        default: true
+      ci-ref:
+        description: Ref of pschmitt/ci-workflows to take the scripts from
+        type: string
+        default: main
+    secrets:
+      amo_api_key:
+        required: false
+      amo_api_secret:
+        required: false
+      chromium_signing_key:
+        required: false
+permissions:
+  contents: read
+jobs:
+  sign:
+    name: Signed browser packages
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+      SIGNED: ${{ github.workspace }}/signed
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/checkout@v7
+        with:
+          repository: pschmitt/ci-workflows
+          ref: ${{ inputs.ci-ref }}
+          path: .ci
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Build the extension packages
+        run: ${{ inputs.build-command }}
+      - name: Reuse the signed packages of this tag's release
+        id: reuse
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FIREFOX_ASSET: ${{ inputs.firefox-asset }}
+          CHROMIUM_ASSET: ${{ inputs.chromium-asset }}
+        run: |
+          version="${TAG#v}"
+          mkdir -p "$SIGNED"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$SIGNED" \
+            --pattern "${FIREFOX_ASSET//\{version\}/$version}" \
+            --pattern "${CHROMIUM_ASSET//\{version\}/$version}"
+          mv "$SIGNED/${FIREFOX_ASSET//\{version\}/$version}" "$SIGNED/firefox.xpi"
+          mv "$SIGNED/${CHROMIUM_ASSET//\{version\}/$version}" "$SIGNED/chromium.crx"
+      - name: Refuse to sign
+        if: steps.reuse.outcome == 'failure' && !inputs.sign
+        run: |
+          echo "::error::$TAG has no signed packages to reuse, and signing is off."
+          exit 1
+      - name: Sign Firefox with AMO
+        if: steps.reuse.outcome == 'failure' && inputs.sign
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.amo_api_key }}
+          WEB_EXT_API_SECRET: ${{ secrets.amo_api_secret }}
+          FIREFOX_DIR: ${{ inputs.firefox-dir }}
+        run: |
+          npm install --global web-ext@10
+          web-ext sign --channel=unlisted --source-dir="$FIREFOX_DIR" --artifacts-dir="$RUNNER_TEMP/signed-firefox"
+          mkdir -p "$SIGNED"
+          cp "$RUNNER_TEMP"/signed-firefox/*.xpi "$SIGNED/firefox.xpi"
+      - uses: browser-actions/setup-chrome@v2
+        if: steps.reuse.outcome == 'failure' && inputs.sign
+      - name: Sign Chromium CRX3
+        if: steps.reuse.outcome == 'failure' && inputs.sign
+        env:
+          CRX_PRIVATE_KEY: ${{ secrets.chromium_signing_key }}
+          CHROMIUM_DIR: ${{ inputs.chromium-dir }}
+        run: |
+          set -euo pipefail
+          key_file="$RUNNER_TEMP/extension.pem"
+          trap 'rm -f "$key_file"' EXIT
+          umask 077
+          printf '%s' "$CRX_PRIVATE_KEY" > "$key_file"
+          google-chrome --headless --no-sandbox --disable-gpu \
+            --pack-extension="$GITHUB_WORKSPACE/$CHROMIUM_DIR" \
+            --pack-extension-key="$key_file"
+          mkdir -p "$SIGNED"
+          cp "$GITHUB_WORKSPACE/$CHROMIUM_DIR.crx" "$SIGNED/chromium.crx"
+      - name: Verify the signed packages match the source
+        env:
+          FIREFOX_DIR: ${{ inputs.firefox-dir }}
+          CHROMIUM_DIR: ${{ inputs.chromium-dir }}
+        run: |
+          python3 .ci/scripts/verify-extension.py \
+            --firefox-source "$FIREFOX_DIR" --chromium-source "$CHROMIUM_DIR" \
+            --firefox "$SIGNED/firefox.xpi" --chromium "$SIGNED/chromium.crx"
+      - name: Name the packages like the release assets
+        env:
+          FIREFOX_ASSET: ${{ inputs.firefox-asset }}
+          CHROMIUM_ASSET: ${{ inputs.chromium-asset }}
+        run: |
+          version="${TAG#v}"
+          mkdir -p dist
+          cp "$SIGNED/firefox.xpi" "dist/${FIREFOX_ASSET//\{version\}/$version}"
+          cp "$SIGNED/chromium.crx" "dist/${CHROMIUM_ASSET//\{version\}/$version}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: browser-extensions
+          path: dist/*
+          if-no-files-found: error

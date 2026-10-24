@@ -1,0 +1,71 @@
+# Check that the packages pinned in browser/packages/metadata.json (what the Nix
+# package fetches) are intact: the release assets match the pinned hashes, and
+# the pinned tag's extension source builds exactly what is inside them.
+name: verify-pin
+on:
+  workflow_call:
+    inputs:
+      firefox-asset:
+        description: Release asset name of the XPI, with {version} for the version
+        type: string
+        required: true
+      chromium-asset:
+        description: Release asset name of the CRX, with {version} for the version
+        type: string
+        required: true
+      metadata:
+        type: string
+        default: browser/packages/metadata.json
+      build-command:
+        description: Run in the pinned tag's checkout
+        type: string
+        default: python3 browser/build.py
+      firefox-dir:
+        type: string
+        default: browser/dist/firefox
+      chromium-dir:
+        type: string
+        default: browser/dist/chromium
+      ci-ref:
+        type: string
+        default: main
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: Verify pinned browser packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: pschmitt/ci-workflows
+          ref: ${{ inputs.ci-ref }}
+          path: .ci
+      - name: Verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FIREFOX_ASSET: ${{ inputs.firefox-asset }}
+          CHROMIUM_ASSET: ${{ inputs.chromium-asset }}
+          METADATA: ${{ inputs.metadata }}
+          BUILD_COMMAND: ${{ inputs.build-command }}
+          FIREFOX_DIR: ${{ inputs.firefox-dir }}
+          CHROMIUM_DIR: ${{ inputs.chromium-dir }}
+        run: |
+          set -euo pipefail
+          version="$(jq -r .version "$METADATA")"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          firefox_asset="${FIREFOX_ASSET//\{version\}/$version}"
+          chromium_asset="${CHROMIUM_ASSET//\{version\}/$version}"
+          signed="$(mktemp -d)"
+          source="$(mktemp -d)"
+          gh release download "v$version" --repo "$GITHUB_REPOSITORY" --dir "$signed" \
+            --pattern "$firefox_asset" --pattern "$chromium_asset"
+          echo "$(jq -r .firefoxSha256 "$METADATA")  $signed/$firefox_asset" | sha256sum --check
+          echo "$(jq -r .chromiumSha256 "$METADATA")  $signed/$chromium_asset" | sha256sum --check
+          git fetch --depth=1 origin "refs/tags/v$version:refs/tags/v$version"
+          git archive "v$version" | tar -x -C "$source"
+          (cd "$source" && eval "$BUILD_COMMAND")
+          python3 .ci/scripts/verify-extension.py \
+            --firefox-source "$source/$FIREFOX_DIR" --chromium-source "$source/$CHROMIUM_DIR" \
+            --firefox "$signed/$firefox_asset" --chromium "$signed/$chromium_asset"
