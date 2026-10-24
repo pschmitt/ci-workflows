@@ -52,10 +52,10 @@ jobs:
             echo "${digest#sha256:}"
           }
 
-          jq --arg version "$version" \
+          jq --arg version "$version" --arg tag "$TAG" \
              --arg firefox "$(digest_for "$firefox_asset")" \
              --arg chromium "$(digest_for "$chromium_asset")" \
-            '.version = $version | .firefoxSha256 = $firefox | .chromiumSha256 = $chromium' \
+            '.version = $version | .tag = $tag | .firefoxSha256 = $firefox | .chromiumSha256 = $chromium' \
             "$METADATA" > "$RUNNER_TEMP/metadata.json"
           cp "$RUNNER_TEMP/metadata.json" "$METADATA"
 

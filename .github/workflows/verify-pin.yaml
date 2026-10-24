@@ -26,6 +26,10 @@ on:
       chromium-dir:
         type: string
         default: browser/dist/chromium
+      check-payload:
+        description: Also compare the packages' files with the pinned tag's source
+        type: boolean
+        default: true
       ci-ref:
         type: string
         default: main
@@ -51,20 +55,26 @@ jobs:
           BUILD_COMMAND: ${{ inputs.build-command }}
           FIREFOX_DIR: ${{ inputs.firefox-dir }}
           CHROMIUM_DIR: ${{ inputs.chromium-dir }}
+          CHECK_PAYLOAD: ${{ inputs.check-payload }}
         run: |
           set -euo pipefail
           version="$(jq -r .version "$METADATA")"
+          tag="$(jq -r --arg default "v$version" '.tag // $default' "$METADATA")"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           firefox_asset="${FIREFOX_ASSET//\{version\}/$version}"
           chromium_asset="${CHROMIUM_ASSET//\{version\}/$version}"
           signed="$(mktemp -d)"
           source="$(mktemp -d)"
-          gh release download "v$version" --repo "$GITHUB_REPOSITORY" --dir "$signed" \
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$signed" \
             --pattern "$firefox_asset" --pattern "$chromium_asset"
           echo "$(jq -r .firefoxSha256 "$METADATA")  $signed/$firefox_asset" | sha256sum --check
           echo "$(jq -r .chromiumSha256 "$METADATA")  $signed/$chromium_asset" | sha256sum --check
-          git fetch --depth=1 origin "refs/tags/v$version:refs/tags/v$version"
-          git archive "v$version" | tar -x -C "$source"
+          if [[ "$CHECK_PAYLOAD" != true ]]
+          then
+            exit 0
+          fi
+          git fetch --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+          git archive "$tag" | tar -x -C "$source"
           (cd "$source" && eval "$BUILD_COMMAND")
           python3 .ci/scripts/verify-extension.py \
             --firefox-source "$source/$FIREFOX_DIR" --chromium-source "$source/$CHROMIUM_DIR" \
