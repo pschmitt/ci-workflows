@@ -1,0 +1,38 @@
+# Build the browser extension, run the repository's own checks on it and lint
+# the Firefox build with web-ext (warnings are errors).
+name: extension-lint
+on:
+  workflow_call:
+    inputs:
+      build-command:
+        type: string
+        default: python3 browser/build.py
+      check-command:
+        description: Repository specific checks, run after the build
+        type: string
+        default: ''
+      firefox-dir:
+        type: string
+        default: browser/dist/firefox
+      node-version:
+        type: string
+        default: '24'
+permissions:
+  contents: read
+jobs:
+  lint-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+      - name: Build the extension
+        run: ${{ inputs.build-command }}
+      - name: Repository checks
+        if: inputs.check-command != ''
+        run: ${{ inputs.check-command }}
+      - name: Lint the Firefox extension
+        env:
+          FIREFOX_DIR: ${{ inputs.firefox-dir }}
+        run: npx --yes web-ext@10 lint --source-dir "$FIREFOX_DIR" --warnings-as-errors

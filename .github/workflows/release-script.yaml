@@ -1,0 +1,21 @@
+# tools/release.sh is a verbatim copy of scripts/release.sh from this repository.
+name: release-script
+on:
+  workflow_call:
+    inputs:
+      ci-ref:
+        type: string
+        default: main
+permissions:
+  contents: read
+jobs:
+  release-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compare with the shared copy
+        env:
+          CI_REF: ${{ inputs.ci-ref }}
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/pschmitt/ci-workflows/$CI_REF/scripts/release.sh" -o "$RUNNER_TEMP/release.sh"
+          diff -u "$RUNNER_TEMP/release.sh" tools/release.sh

@@ -11,5 +11,12 @@ ship a browser extension next to a tool ([rbw](https://github.com/pschmitt/rbw),
 | `pin-release.yaml` | Writes the release assets' version and SHA-256 to `browser/packages/metadata.json` on the default branch; the Nix packages fetch the assets by those hashes. |
 | `verify-pin.yaml` | CI check: the pinned assets match their hashes and the pinned tag's source. |
 
+| `rust-lint.yaml` | rustfmt, clippy (`-D warnings`) and optionally cargo-deny. |
+| `extension-lint.yaml` | Builds the extension, runs the repository's checks and `web-ext lint`. |
+| `release-script.yaml` | Fails when `tools/release.sh` differs from `scripts/release.sh` here. |
+
 `scripts/verify-extension.py` is the check both signing and verification use.
+`scripts/release.sh` is the release tool (`prepare VERSION`, `tag`); each repository
+carries a verbatim copy in `tools/release.sh` and, if its version lives somewhere
+other than `Cargo.toml`, a `tools/release-hooks.sh`.
 Callers pin these with `uses: pschmitt/ci-workflows/.github/workflows/<name>.yaml@main`.

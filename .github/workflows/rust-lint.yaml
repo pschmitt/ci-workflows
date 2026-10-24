@@ -1,0 +1,48 @@
+# rustfmt, clippy (warnings are errors) and, when asked, cargo-deny.
+name: rust-lint
+on:
+  workflow_call:
+    inputs:
+      apt-packages:
+        description: Space separated packages to install before building
+        type: string
+        default: ''
+      all-features:
+        type: boolean
+        default: true
+      deny:
+        description: Also run cargo-deny
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install system packages
+        if: inputs.apt-packages != ''
+        env:
+          PACKAGES: ${{ inputs.apt-packages }}
+        run: sudo apt-get update && sudo apt-get install -y $PACKAGES
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - name: Clippy
+        env:
+          FEATURES: ${{ inputs.all-features && '--all-features' || '' }}
+        run: cargo clippy --locked --all-targets $FEATURES -- -D warnings
+      - uses: cargo-bins/cargo-binstall@main
+        if: inputs.deny
+      # --force: rust-cache restores binstall's install manifest but not the
+      # binary itself, so without it binstall skips the (missing) install
+      - name: cargo-deny
+        if: inputs.deny
+        env:
+          FEATURES: ${{ inputs.all-features && '--all-features' || '' }}
+        run: |
+          cargo binstall --no-confirm --force cargo-deny
+          cargo deny $FEATURES check
