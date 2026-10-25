@@ -20,3 +20,6 @@ ship a browser extension next to a tool ([rbw](https://github.com/pschmitt/rbw),
 carries a verbatim copy in `tools/release.sh` and, if its version lives somewhere
 other than `Cargo.toml`, a `tools/release-hooks.sh`.
 Callers pin these with `uses: pschmitt/ci-workflows/.github/workflows/<name>.yaml@main`.
+
+Repositories with `nixbot.toml` also wait for successful `nixbot/nix-eval` and
+`nixbot/nix-build` checks on the exact commit before the release helper tags it.
