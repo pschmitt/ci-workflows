@@ -1,0 +1,82 @@
+name: nix-aarch64
+# A flake's aarch64-linux packages and checks, built natively on GitHub's arm
+# runners (nixbot on x86_64 could only emulate them) and pushed to the niks3 S3
+# cache with a short-lived GitHub OIDC token: main pins its outputs, pull
+# requests push unpinned (niks3's GC collects them). The server must trust the
+# calling repository (oidc.providers.github in its config), and the caller needs
+# `permissions: id-token: write` and the repository variable NIKS3_SERVER_URL.
+on:
+  workflow_call:
+    inputs:
+      exclude:
+        description: JSON list of package names to leave out (those that cannot build on aarch64-linux)
+        type: string
+        default: "[]"
+      pin-prefix:
+        description: Prefix of the pins main creates (the server's rule for this repository allows it), e.g. gh-rbw-main
+        type: string
+        required: true
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A cancelled main run pushes nothing; only pull requests may cancel.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  NIKS3_SERVER_URL: ${{ vars.NIKS3_SERVER_URL }}
+  # The niks3 client of the server's release.
+  NIKS3_CLI: github:Mic92/niks3/a79dc58832332ebd953974e71160ab69e2371d62#niks3
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: pschmitt/ci-workflows
+          path: .ci-workflows
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - name: Build the packages
+        env:
+          EXCLUDE: ${{ inputs.exclude }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/outs"
+          nix eval --json .#packages.aarch64-linux --apply builtins.attrNames \
+            | jq -r --argjson exclude "$EXCLUDE" '.[] | select(. as $name | $exclude | index($name) | not)' \
+            | while read -r attr
+          do
+            nix build --no-link --print-build-logs --print-out-paths ".#packages.aarch64-linux.$attr" \
+              > "$RUNNER_TEMP/outs/$attr"
+          done
+      - name: Flake checks
+        run: nix flake check --print-build-logs
+      - name: Push to niks3
+        # Not for forks (no OIDC token) or branches other than main and pull requests.
+        if: ${{ env.NIKS3_SERVER_URL != '' && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request') }}
+        env:
+          PIN_PREFIX: ${{ inputs.pin-prefix }}
+        run: |
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]
+          then
+            echo "No GitHub OIDC token available; not pushing." >&2
+            exit 0
+          fi
+          cli="$(nix build --no-link --print-out-paths "$NIKS3_CLI")"
+          auth=(--server-url "$NIKS3_SERVER_URL" --auth-token-script "python3 $GITHUB_WORKSPACE/.ci-workflows/scripts/niks3-oidc-token.py")
+          for file in "$RUNNER_TEMP"/outs/*
+          do
+            attr="$(basename "$file")"
+            index=0
+            while read -r path
+            do
+              if [[ "$GITHUB_REF" == refs/heads/main ]]
+              then
+                "$cli/bin/niks3" push "${auth[@]}" --pin "$PIN_PREFIX-$attr-$index" "$path"
+              else
+                "$cli/bin/niks3" push "${auth[@]}" "$path"
+              fi
+              index=$((index + 1))
+            done < "$file"
+          done
