@@ -29,7 +29,7 @@ env:
   NIKS3_CLI: github:Mic92/niks3/a79dc58832332ebd953974e71160ab69e2371d62#niks3
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
