@@ -42,6 +42,12 @@ For Home Assistant integrations using `setup-uv@v5`, the
 `uvx ruff format --check .` after the caller checks out its code. Keep the
 Hassfest job and repository-specific tests in the caller.
 
+## Nix
+
+`nix-flake-lock.yaml` updates `flake.lock` and opens an update pull request.
+The caller owns the schedule and manual trigger and must grant `contents: write`
+and `pull-requests: write`. The workflow uses the default GitHub token.
+
 ## Android
 
 The Android interfaces were brought over from
