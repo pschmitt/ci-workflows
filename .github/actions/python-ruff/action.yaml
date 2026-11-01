@@ -9,6 +9,10 @@ inputs:
     description: Emit Ruff output in GitHub Actions annotation format
     required: false
     default: 'false'
+  format-check:
+    description: Also check formatting with `ruff format --check`
+    required: false
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -32,3 +36,8 @@ runs:
       if: inputs.github-output == 'true'
       shell: bash
       run: ruff check --output-format=github .
+
+    - name: Check Ruff formatting
+      if: inputs.format-check == 'true'
+      shell: bash
+      run: ruff format --check .
