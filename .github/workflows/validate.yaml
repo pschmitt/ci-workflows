@@ -1,0 +1,29 @@
+name: Validate CI definitions
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Lint workflows
+        uses: raven-actions/actionlint@v2
+        with:
+          version: 1.7.12
+          flags: >-
+            -ignore ubuntu-26.04
+            -ignore "SC2012.*Use find instead of ls to better handle non-alphanumeric filenames"
+            -ignore "SC2206.*Quote to prevent word splitting/globbing, or split robustly with mapfile or read -a"
+            -ignore "SC2086.*Double quote to prevent globbing and word splitting"
+            -ignore "SC2046.*Quote this to prevent word splitting"
+
+      - name: Validate composite action metadata
+        run: |
+          for action in .github/actions/*/action.yaml; do
+            npx --yes --package=@action-validator/cli@0.6.0 action-validator "$action"
+          done
