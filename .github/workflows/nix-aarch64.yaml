@@ -6,7 +6,9 @@ name: nix-aarch64
 # calling repository (oidc.providers.github in its config), and the caller needs
 # `permissions: id-token: write` and the repository variable NIKS3_SERVER_URL.
 # The same S3 bucket is read as a substituter (read-only key, passed as secrets)
-# and a Nix store cache keyed on flake.lock is kept for main.
+# and a Nix store cache keyed on flake.lock is kept for main. No concurrency group
+# of its own: it runs as a job of the caller's workflow, whose group a second one
+# with the same name would deadlock; the caller decides what to cancel.
 on:
   workflow_call:
     inputs:
@@ -31,10 +33,6 @@ on:
 permissions:
   contents: read
   id-token: write
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # A cancelled main run pushes nothing; only pull requests may cancel.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   NIKS3_SERVER_URL: ${{ vars.NIKS3_SERVER_URL }}
   # The niks3 client of the server's release.
