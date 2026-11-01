@@ -43,7 +43,9 @@ runs `ruff check`; set `github-output: 'true'` to emit GitHub annotations.
 For Home Assistant integrations using `setup-uv@v5`, the
 `.github/actions/homeassistant-ruff-v5` composite runs `uvx ruff check .` and
 `uvx ruff format --check .` after the caller checks out its code. Keep the
-Hassfest job and repository-specific tests in the caller.
+Hassfest job and repository-specific tests in the caller. The
+`homeassistant-ruff-v10` variant uses `setup-uv@v10.3.3` for callers already on
+that version.
 
 ## Shell
 
