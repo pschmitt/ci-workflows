@@ -5,10 +5,18 @@ inputs:
     description: Python version used for the Ruff checks
     required: false
     default: '3.x'
+  upgrade-pip:
+    description: Upgrade pip before installing Ruff
+    required: false
+    default: 'true'
   github-output:
     description: Emit Ruff output in GitHub Actions annotation format
     required: false
     default: 'false'
+  check-path:
+    description: Ruff check path (`.` for explicit current-directory mode, empty for default)
+    required: false
+    default: ''
   format-check:
     description: Also check formatting with `ruff format --check`
     required: false
@@ -21,16 +29,34 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install Ruff
+    - name: Upgrade pip and install Ruff
+      if: inputs.upgrade-pip == 'true'
       shell: bash
       run: |
         python -m pip install --upgrade pip
         pip install ruff
 
+    - name: Install Ruff
+      if: inputs.upgrade-pip != 'true'
+      shell: bash
+      run: pip install ruff
+
+    - name: Validate Ruff check path
+      if: inputs.check-path != '' && inputs.check-path != '.'
+      shell: bash
+      run: |
+        echo 'check-path must be empty or .' >&2
+        exit 1
+
     - name: Run Ruff
-      if: inputs.github-output != 'true'
+      if: inputs.github-output != 'true' && inputs.check-path == ''
       shell: bash
       run: ruff check
+
+    - name: Run Ruff on the current directory
+      if: inputs.github-output != 'true' && inputs.check-path == '.'
+      shell: bash
+      run: ruff check .
 
     - name: Run Ruff with GitHub annotations
       if: inputs.github-output == 'true'

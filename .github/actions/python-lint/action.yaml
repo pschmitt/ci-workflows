@@ -32,8 +32,15 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
+    - name: Validate Flake8 mode
+      if: inputs.flake8-mode != 'default' && inputs.flake8-mode != 'custom'
+      shell: bash
+      run: |
+        echo 'flake8-mode must be either default or custom' >&2
+        exit 1
+
     - name: Flake8
-      if: inputs.flake8-mode != 'custom'
+      if: inputs.flake8-mode == 'default'
       uses: py-actions/flake8@v2
 
     - name: Install custom Flake8 dependencies
@@ -42,9 +49,10 @@ runs:
       env:
         REQUIREMENTS_FILE: ${{ inputs.requirements-file }}
       run: |
-        python -m pip install flake8
-        if [[ -n "$REQUIREMENTS_FILE" ]]; then
-          python -m pip install -r "$REQUIREMENTS_FILE"
+        python -m pip install --upgrade pip
+        pip install flake8 black
+        if [[ -n "$REQUIREMENTS_FILE" && -f "$REQUIREMENTS_FILE" ]]; then
+          pip install -r "$REQUIREMENTS_FILE"
         fi
 
     - name: Run required Flake8 check
@@ -66,11 +74,21 @@ runs:
         flake8 "${flake8_args[@]}"
 
     - name: Black
+      if: inputs.flake8-mode == 'default'
       shell: bash
       env:
         BLACK_ARGS: ${{ inputs.black-args }}
       run: |
         python -m pip install --upgrade pip
-        python -m pip install black
+        pip install black
+        read -r -a black_args <<< "$BLACK_ARGS"
+        black "${black_args[@]}"
+
+    - name: Black (custom Flake8 mode)
+      if: inputs.flake8-mode == 'custom'
+      shell: bash
+      env:
+        BLACK_ARGS: ${{ inputs.black-args }}
+      run: |
         read -r -a black_args <<< "$BLACK_ARGS"
         black "${black_args[@]}"
