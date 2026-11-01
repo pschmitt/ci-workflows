@@ -37,7 +37,14 @@ version and runs Flake8 and Black. For example:
 ```
 
 For projects using pip and Ruff, `.github/actions/python-ruff` installs Ruff and
-runs `ruff check`; set `github-output: 'true'` to emit GitHub annotations.
+runs `ruff check`; set `github-output: 'true'` to emit GitHub annotations or
+`format-check: 'true'` to also check formatting. Set `upgrade-pip: 'false'`
+to retain the runner's existing pip version.
+
+`python-lint` also supports `flake8-mode: custom`, an optional requirements
+file, and configurable Flake8 and Black arguments. Argument strings are split
+on whitespace; shell quoting and expansion are not supported. The default mode
+continues to use `py-actions/flake8@v2`.
 
 For Home Assistant integrations using `setup-uv@v5`, the
 `.github/actions/homeassistant-ruff-v5` composite runs `uvx ruff check .` and
@@ -57,6 +64,14 @@ The caller performs checkout and can supply `SHELLCHECK_OPTS` in its environment
 `nix-flake-lock.yaml` updates `flake.lock` and opens an update pull request.
 The caller owns the schedule and manual trigger and must grant `contents: write`
 and `pull-requests: write`. The workflow uses the default GitHub token.
+
+## Docker
+
+`docker-build.yaml` builds and publishes multi-platform images to Docker Hub
+and GHCR. The caller specifies the image name and platforms, passes the Docker
+Hub credentials, and grants `contents: read` and `packages: write`. For a
+non-publishing build, set `publish: false`; it skips registry logins, image
+pushes and cache export and can run with read-only permissions.
 
 ## Android
 
