@@ -365,5 +365,14 @@
       "commit-message": "string"
     },
     "secrets": "inherit"
+  },
+  {
+    "caller": "myl/.github/workflows/release.yaml",
+    "context": "jobs.release",
+    "component": "github-release.yaml",
+    "kind": "workflow",
+    "with": {
+      "dry-run": "boolean"
+    }
   }
 ]
