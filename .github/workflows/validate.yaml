@@ -17,10 +17,10 @@ jobs:
           version: 1.7.12
           flags: >-
             -ignore ubuntu-26.04
-            -ignore "SC2012.*Use find instead of ls to better handle non-alphanumeric filenames"
-            -ignore "SC2206.*Quote to prevent word splitting/globbing, or split robustly with mapfile or read -a"
-            -ignore "SC2086.*Double quote to prevent globbing and word splitting"
-            -ignore "SC2046.*Quote this to prevent word splitting"
+            -ignore SC2012
+            -ignore SC2206
+            -ignore SC2086
+            -ignore SC2046
 
       - name: Validate composite action metadata
         run: |
