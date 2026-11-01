@@ -37,6 +37,9 @@ version and runs Flake8 and Black. For example:
     python-version: '3.15'
 ```
 
+For projects using pip and Ruff, `.github/actions/python-ruff` installs Ruff and
+runs `ruff check`; set `github-output: 'true'` to emit GitHub annotations.
+
 For Home Assistant integrations using `setup-uv@v5`, the
 `.github/actions/homeassistant-ruff-v5` composite runs `uvx ruff check .` and
 `uvx ruff format --check .` after the caller checks out its code. Keep the
