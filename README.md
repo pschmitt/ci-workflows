@@ -45,6 +45,12 @@ For Home Assistant integrations using `setup-uv@v5`, the
 `uvx ruff format --check .` after the caller checks out its code. Keep the
 Hassfest job and repository-specific tests in the caller.
 
+## Shell
+
+`.github/actions/shellcheck` checks discovered shell files together using
+`ludeeus/action-shellcheck`; the optional `ignore_names` input excludes names.
+The caller performs checkout and can supply `SHELLCHECK_OPTS` in its environment.
+
 ## Nix
 
 `nix-flake-lock.yaml` updates `flake.lock` and opens an update pull request.

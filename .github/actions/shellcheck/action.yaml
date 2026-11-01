@@ -1,0 +1,15 @@
+name: ShellCheck
+description: Run ShellCheck with included files checked together
+inputs:
+  ignore_names:
+    description: Names of shell scripts to exclude from ShellCheck
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Run ShellCheck
+      uses: ludeeus/action-shellcheck@master
+      with:
+        check_together: 'yes'
+        ignore_names: ${{ inputs.ignore_names }}
