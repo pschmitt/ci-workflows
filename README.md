@@ -10,7 +10,6 @@ and [bruvtab](https://github.com/pschmitt/bruvtab).
 | `sign-extension.yaml` | Signs the extension for a version tag (Firefox via AMO, Chromium as a CRX3), reusing the tag's release assets when they match the source (AMO signs a version only once). Produces the `browser-extensions` artifact. |
 | `pin-release.yaml` | Writes the release assets' version and SHA-256 to `browser/packages/metadata.json` on the default branch; the Nix packages fetch the assets by those hashes. |
 | `verify-pin.yaml` | CI check: the pinned assets match their hashes and the pinned tag's source. |
-
 | `rust-lint.yaml` | rustfmt, clippy (`-D warnings`) and optionally cargo-deny. |
 | `extension-lint.yaml` | Builds the extension, runs the repository's checks and `web-ext lint`. |
 | `nix-aarch64.yaml` | Builds a flake's aarch64-linux packages and checks natively on an arm runner and pushes them to the niks3 S3 cache with a GitHub OIDC token (main pins `<pin-prefix>-<package>-<n>`, pull requests push unpinned). The caller needs `id-token: write`, the variable `NIKS3_SERVER_URL`, and the server must trust the repository. It reads the same bucket as a substituter when the caller passes the read-only `s3_store`, `s3_access_key` and `s3_secret_key` secrets, and keeps a Nix store cache for main. |
@@ -20,7 +19,7 @@ and [bruvtab](https://github.com/pschmitt/bruvtab).
 `scripts/release.sh` is the release tool (`prepare VERSION`, `tag`); each repository
 carries a verbatim copy in `tools/release.sh` and, if its version lives somewhere
 other than `Cargo.toml`, a `tools/release-hooks.sh`.
-Callers pin these with `uses: pschmitt/ci-workflows/.github/workflows/<name>.yaml@main`.
+Callers reference these with `uses: pschmitt/ci-workflows/.github/workflows/<name>.yaml@main`.
 
 Repositories with `nixbot.toml` also wait for successful `nixbot/nix-eval` and
 `nixbot/nix-build` checks on the exact commit before the release helper tags it.
