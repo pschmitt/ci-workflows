@@ -29,8 +29,8 @@ Repositories with `nixbot.toml` also wait for successful `nixbot/nix-eval` and
 
 The Android interfaces were brought over from
 [android-app-ci](https://github.com/pschmitt/android-app-ci). See the
-[provenance and license notice](ANDROID-CI-NOTICE.md) and the source project's
-[caller examples and input documentation](https://github.com/pschmitt/android-app-ci#caller-templates).
+[provenance and license notice](ANDROID-CI-NOTICE.md) and the
+[Android caller examples and input documentation](docs/android-ci.md).
 Existing callers can continue using the original repository during migration.
 
 | Workflow | Purpose |
