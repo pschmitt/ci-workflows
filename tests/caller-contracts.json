@@ -1,0 +1,369 @@
+[
+  {
+    "caller": "browser-daemon/.github/workflows/build.yaml",
+    "context": "jobs.nix-aarch64",
+    "component": "nix-aarch64.yaml",
+    "kind": "workflow",
+    "with": {
+      "exclude": "string",
+      "pin-prefix": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
+  },
+  {
+    "caller": "browser-daemon/.github/workflows/lint.yaml",
+    "context": "jobs.lint",
+    "component": "rust-lint.yaml",
+    "kind": "workflow",
+    "with": {}
+  },
+  {
+    "caller": "browser-daemon/.github/workflows/lint.yaml",
+    "context": "jobs.lint-extension",
+    "component": "extension-lint.yaml",
+    "kind": "workflow",
+    "with": {
+      "check-command": "string"
+    }
+  },
+  {
+    "caller": "browser-daemon/.github/workflows/lint.yaml",
+    "context": "jobs.release-script",
+    "component": "release-script.yaml",
+    "kind": "workflow",
+    "with": {}
+  },
+  {
+    "caller": "browser-daemon/.github/workflows/release.yaml",
+    "context": "jobs.browser-extensions",
+    "component": "sign-extension.yaml",
+    "kind": "workflow",
+    "with": {
+      "chromium-asset": "string",
+      "firefox-asset": "string",
+      "sign": "expression",
+      "tag": "expression"
+    },
+    "secrets": [
+      "amo_api_key",
+      "amo_api_secret",
+      "chromium_signing_key"
+    ]
+  },
+  {
+    "caller": "browser-daemon/.github/workflows/release.yaml",
+    "context": "jobs.packages",
+    "component": "pin-release.yaml",
+    "kind": "workflow",
+    "with": {
+      "chromium-asset": "string",
+      "firefox-asset": "string",
+      "tag": "expression"
+    }
+  },
+  {
+    "caller": "browser-daemon/.github/workflows/test.yaml",
+    "context": "jobs.pin",
+    "component": "verify-pin.yaml",
+    "kind": "workflow",
+    "with": {
+      "chromium-asset": "string",
+      "firefox-asset": "string"
+    }
+  },
+  {
+    "caller": "browser-daemon/.github/workflows/update-flake-lock.yaml",
+    "context": "jobs.update",
+    "component": "nix-flake-lock.yaml",
+    "kind": "workflow",
+    "with": {}
+  },
+  {
+    "caller": "bruvtab/.github/workflows/lint.yaml",
+    "context": "jobs.lint-extension",
+    "component": "extension-lint.yaml",
+    "kind": "workflow",
+    "with": {
+      "build-command": "string",
+      "firefox-dir": "string"
+    }
+  },
+  {
+    "caller": "bruvtab/.github/workflows/lint.yaml",
+    "context": "jobs.release-script",
+    "component": "release-script.yaml",
+    "kind": "workflow",
+    "with": {}
+  },
+  {
+    "caller": "bruvtab/.github/workflows/release.yaml",
+    "context": "jobs.packages",
+    "component": "pin-release.yaml",
+    "kind": "workflow",
+    "with": {
+      "chromium-asset": "string",
+      "firefox-asset": "string",
+      "tag": "expression"
+    }
+  },
+  {
+    "caller": "bruvtab/.github/workflows/test.yaml",
+    "context": "jobs.pin",
+    "component": "verify-pin.yaml",
+    "kind": "workflow",
+    "with": {
+      "check-payload": "boolean",
+      "chromium-asset": "string",
+      "firefox-asset": "string"
+    }
+  },
+  {
+    "caller": "jollyfin/.github/workflows/lint.yaml",
+    "context": "jobs.lint",
+    "component": "lint.yaml",
+    "kind": "workflow",
+    "with": {
+      "enable-android-lint": "boolean",
+      "lint-baseline-path": "string"
+    },
+    "secrets": "inherit"
+  },
+  {
+    "caller": "jollyfin/.github/workflows/play-store-assets.yaml",
+    "context": "jobs.upload",
+    "component": "play-store-assets.yaml",
+    "kind": "workflow",
+    "with": {
+      "application-id": "string"
+    },
+    "secrets": "inherit"
+  },
+  {
+    "caller": "jollyfin/.github/workflows/play-store.yaml",
+    "context": "jobs.play-store",
+    "component": "play-store.yaml",
+    "kind": "workflow",
+    "with": {
+      "aab-path": "string",
+      "application-id": "string",
+      "artifact-label": "string",
+      "gradle-bundle-task": "string",
+      "publish": "expression",
+      "status": "expression",
+      "track": "expression",
+      "version-code": "expression",
+      "version-name": "expression"
+    },
+    "secrets": "inherit"
+  },
+  {
+    "caller": "jollyfin/.github/workflows/release.yaml",
+    "context": "jobs.release",
+    "component": "release.yaml",
+    "kind": "workflow",
+    "with": {
+      "apk-rename-sed": "string",
+      "app-display-name": "string",
+      "application-id": "string",
+      "artifact-label": "string",
+      "debug-apk-paths": "string",
+      "gradle-debug-task": "string",
+      "gradle-release-task": "string",
+      "release-apk-paths": "string"
+    },
+    "secrets": "inherit"
+  },
+  {
+    "caller": "jollyfin/.github/workflows/screenshots.yaml",
+    "context": "jobs.capture.steps.1",
+    "component": "setup-jdk-gradle",
+    "kind": "action",
+    "with": {}
+  },
+  {
+    "caller": "jollyfin/.github/workflows/screenshots.yaml",
+    "context": "jobs.capture.steps.7",
+    "component": "enable-kvm",
+    "kind": "action",
+    "with": {}
+  },
+  {
+    "caller": "jollyfin/.github/workflows/screenshots.yaml",
+    "context": "jobs.open-pr",
+    "component": "screenshots-open-pr.yaml",
+    "kind": "workflow",
+    "with": {
+      "artifact-label": "string",
+      "commit-message": "string"
+    },
+    "secrets": "inherit"
+  },
+  {
+    "caller": "rbw/.github/workflows/build.yaml",
+    "context": "jobs.nix-aarch64",
+    "component": "nix-aarch64.yaml",
+    "kind": "workflow",
+    "with": {
+      "exclude": "string",
+      "pin-prefix": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
+  },
+  {
+    "caller": "rbw/.github/workflows/lint.yaml",
+    "context": "jobs.lint",
+    "component": "rust-lint.yaml",
+    "kind": "workflow",
+    "with": {
+      "apt-packages": "string",
+      "deny": "boolean"
+    }
+  },
+  {
+    "caller": "rbw/.github/workflows/lint.yaml",
+    "context": "jobs.lint-extension",
+    "component": "extension-lint.yaml",
+    "kind": "workflow",
+    "with": {
+      "check-command": "string"
+    }
+  },
+  {
+    "caller": "rbw/.github/workflows/lint.yaml",
+    "context": "jobs.release-script",
+    "component": "release-script.yaml",
+    "kind": "workflow",
+    "with": {}
+  },
+  {
+    "caller": "rbw/.github/workflows/release.yaml",
+    "context": "jobs.browser-extensions",
+    "component": "sign-extension.yaml",
+    "kind": "workflow",
+    "with": {
+      "chromium-asset": "string",
+      "firefox-asset": "string",
+      "sign": "expression",
+      "tag": "expression"
+    },
+    "secrets": [
+      "amo_api_key",
+      "amo_api_secret",
+      "chromium_signing_key"
+    ]
+  },
+  {
+    "caller": "rbw/.github/workflows/release.yaml",
+    "context": "jobs.packages",
+    "component": "pin-release.yaml",
+    "kind": "workflow",
+    "with": {
+      "chromium-asset": "string",
+      "firefox-asset": "string",
+      "tag": "expression"
+    }
+  },
+  {
+    "caller": "rbw/.github/workflows/test.yaml",
+    "context": "jobs.pin",
+    "component": "verify-pin.yaml",
+    "kind": "workflow",
+    "with": {
+      "chromium-asset": "string",
+      "firefox-asset": "string"
+    }
+  },
+  {
+    "caller": "syncwich/.github/workflows/build.yaml",
+    "context": "jobs.build",
+    "component": "build.yaml",
+    "kind": "workflow",
+    "with": {
+      "compute-version-name": "boolean"
+    }
+  },
+  {
+    "caller": "syncwich/.github/workflows/lint.yaml",
+    "context": "jobs.lint",
+    "component": "lint.yaml",
+    "kind": "workflow",
+    "with": {
+      "enable-auto-fix": "boolean",
+      "lint-baseline-path": "string"
+    },
+    "secrets": "inherit"
+  },
+  {
+    "caller": "syncwich/.github/workflows/play-store-assets.yaml",
+    "context": "jobs.upload",
+    "component": "play-store-assets.yaml",
+    "kind": "workflow",
+    "with": {
+      "application-id": "string"
+    },
+    "secrets": "inherit"
+  },
+  {
+    "caller": "syncwich/.github/workflows/play-store.yaml",
+    "context": "jobs.play-store",
+    "component": "play-store.yaml",
+    "kind": "workflow",
+    "with": {
+      "application-id": "string",
+      "artifact-label": "string",
+      "publish": "expression",
+      "status": "expression",
+      "track": "expression",
+      "version-code": "expression",
+      "version-name": "expression"
+    },
+    "secrets": "inherit"
+  },
+  {
+    "caller": "syncwich/.github/workflows/release.yaml",
+    "context": "jobs.release",
+    "component": "release.yaml",
+    "kind": "workflow",
+    "with": {
+      "app-display-name": "string",
+      "application-id": "string",
+      "artifact-label": "string",
+      "compute-version-name": "boolean",
+      "trigger-screenshots": "boolean"
+    },
+    "secrets": "inherit"
+  },
+  {
+    "caller": "syncwich/.github/workflows/screenshots.yaml",
+    "context": "jobs.capture.steps.1",
+    "component": "setup-jdk-gradle",
+    "kind": "action",
+    "with": {}
+  },
+  {
+    "caller": "syncwich/.github/workflows/screenshots.yaml",
+    "context": "jobs.capture.steps.9",
+    "component": "enable-kvm",
+    "kind": "action",
+    "with": {}
+  },
+  {
+    "caller": "syncwich/.github/workflows/screenshots.yaml",
+    "context": "jobs.open-pr",
+    "component": "screenshots-open-pr.yaml",
+    "kind": "workflow",
+    "with": {
+      "artifact-label": "string",
+      "commit-message": "string"
+    },
+    "secrets": "inherit"
+  }
+]

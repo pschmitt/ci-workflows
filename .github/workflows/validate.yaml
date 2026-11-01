@@ -11,6 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Check shared caller interfaces
+        run: |
+          python -m pip install --disable-pip-version-check PyYAML==6.0.2
+          python scripts/check-shared-interfaces.py
+
       - name: Lint workflows
         uses: raven-actions/actionlint@v2
         with:
