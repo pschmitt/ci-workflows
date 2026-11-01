@@ -1,9 +1,9 @@
 # ci-workflows
 
-Reusable GitHub Actions workflows and scripts shared by my repositories that
-ship a browser extension next to a tool ([rbw](https://github.com/pschmitt/rbw),
+Reusable GitHub Actions workflows, actions and scripts shared by my repositories.
+The extension workflows serve projects including [rbw](https://github.com/pschmitt/rbw),
 [browser-daemon](https://github.com/pschmitt/browser-daemon),
-[bruvtab](https://github.com/pschmitt/bruvtab)).
+and [bruvtab](https://github.com/pschmitt/bruvtab).
 
 | Workflow | What it does |
 |---|---|
@@ -24,3 +24,27 @@ Callers pin these with `uses: pschmitt/ci-workflows/.github/workflows/<name>.yam
 
 Repositories with `nixbot.toml` also wait for successful `nixbot/nix-eval` and
 `nixbot/nix-build` checks on the exact commit before the release helper tags it.
+
+## Android
+
+The Android interfaces were brought over from
+[android-app-ci](https://github.com/pschmitt/android-app-ci). See the
+[provenance and license notice](ANDROID-CI-NOTICE.md) and the source project's
+[caller examples and input documentation](https://github.com/pschmitt/android-app-ci#caller-templates).
+Existing callers can continue using the original repository during migration.
+
+| Workflow | Purpose |
+|---|---|
+| `build.yaml` | Debug build, unit tests and APK artifacts. |
+| `lint.yaml` | ktfmt and Android Lint. |
+| `release.yaml` | Signed APK release and attestations. |
+| `play-store.yaml` | AAB build and gated Play Store publishing. |
+| `play-store-assets.yaml` | Upload Play Store listing assets. |
+| `screenshots-open-pr.yaml` | Collect screenshot artifacts and open or update a PR. |
+
+Call these through `pschmitt/ci-workflows/.github/workflows/<name>.yaml@main`.
+Composite actions live in `.github/actions/`; screenshot capture remains in
+the caller, and can invoke `scripts/wait-for-android-emulator.sh` inside the
+emulator runner. Shared Just recipes and the Nix devShell helper remain at
+`just/` and `nix/devshells.nix` for existing integration patterns. Review each
+workflow's inputs, permissions and secrets before changing a caller.

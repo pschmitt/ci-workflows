@@ -1,0 +1,220 @@
+# Shared Android app devShell builder for the fleet (nyetbox, augh, jollyfin, syncwich, ...).
+#
+# Not a flake itself - a plain function, imported directly from a consumer's own flake.nix so
+# each app keeps its own nixpkgs/android-nixpkgs/git-hooks flake inputs (and its own flake.lock
+# pins) rather than inheriting a second, potentially-diverging set from this repo. Typical caller:
+#
+#   ci-workflows = {
+#     url = "github:pschmitt/ci-workflows";
+#     flake = false;
+#   };
+#
+#   ...
+#
+#   androidEnv = import "${ci-workflows}/nix/devshells.nix" {
+#     inherit pkgs android-nixpkgs system;
+#     appName = "Nyetbox";
+#     buildToolsVersion = "37.0.0";
+#     platformVersion = "37-0";  # exact android-nixpkgs "platforms-android-*" suffix - not
+#                                 # always just the bare API level, e.g. a preview/extension
+#                                 # level API 37 is "platforms-android-37-0", not "-37". Check
+#                                 # `nix eval github:tadfisher/android-nixpkgs#... --apply builtins.attrNames`
+#                                 # or just try the bare level first and read the "Did you mean
+#                                 # one of ..." error if it's wrong.
+#     gitHooksLib = git-hooks.lib;    # null to skip pre-commit entirely
+#     preCommitExtra = {
+#       check-added-large-files.excludes = [ "^ci/netbox/fixtures/.*\\.dump$" ];
+#     };
+#     extraPackages = [ nyetboxSetup ];
+#     screenshotsSystemImage = "system-images-android-34-google-apis-x86-64"; # null to skip
+#     quickStart = ''
+#       echo "  just build                    # Build debug APK on rofl-13"
+#     '';
+#   };
+#
+# in {
+#   devShells.${system} = androidEnv.devShells;
+#   checks.${system} = androidEnv.checks;         # only present if gitHooksLib was set
+# }
+{
+  pkgs,
+  android-nixpkgs,
+  system,
+
+  # Human-readable app name for the shellHook banner, e.g. "Nyetbox".
+  appName,
+
+  # Android build-tools version, e.g. "37.0.0" (dots, converted below to the
+  # android-nixpkgs "build-tools-37-0-0" attribute name).
+  buildToolsVersion,
+  # Exact android-nixpkgs "platforms-android-*" attribute suffix - not always just the bare API
+  # level (e.g. "36"); a preview/extension level like API 37 is "platforms-android-37-0", not
+  # "-37" - confirmed live via the "Did you mean one of ..." error when it's wrong.
+  platformVersion,
+
+  # JDK package to use, e.g. pkgs.jdk21.
+  jdk ? pkgs.jdk21,
+
+  # Extra packages in the default devShell beyond [ jdk just ktfmt android-composition ].
+  extraPackages ? [ ],
+
+  # git-hooks.nix integration (present in nyetbox/jollyfin/syncwich, absent in augh). Pass
+  # `gitHooksLib = git-hooks.lib` (the flake output, so this module doesn't need its own
+  # git-hooks.nix input) to enable; leave null to skip entirely.
+  gitHooksLib ? null,
+  preCommitSrc ? ./.,
+  # Extra/overriding hooks merged into the default set below, e.g. to add per-repo
+  # check-added-large-files excludes.
+  preCommitExtra ? { },
+
+  # Set to null to skip the "screenshots" devShell entirely (jollyfin/syncwich don't have local
+  # AVD-based screenshot capture, only CI-driven capture).
+  screenshotsSystemImage ? "system-images-android-34-google-apis-x86-64",
+
+  # Extra shellHook lines appended after the standard "Quick start" block, e.g. app-specific
+  # `just` recipe hints.
+  quickStart ? "",
+}:
+let
+  android-composition = android-nixpkgs.sdk.${system} (
+    sdkPkgs:
+    with sdkPkgs;
+    [
+      cmdline-tools-latest
+      platform-tools
+    ]
+    ++ [
+      sdkPkgs."build-tools-${builtins.replaceStrings [ "." ] [ "-" ] buildToolsVersion}"
+      sdkPkgs."platforms-android-${platformVersion}"
+    ]
+  );
+
+  android-composition-screenshots = android-nixpkgs.sdk.${system} (
+    sdkPkgs: with sdkPkgs; [
+      cmdline-tools-latest
+      platform-tools
+      emulator
+      sdkPkgs.${screenshotsSystemImage}
+    ]
+  );
+
+  defaultPreCommitHooks = {
+    trim-trailing-whitespace.enable = true;
+    end-of-file-fixer.enable = true;
+    check-merge-conflicts.enable = true;
+    check-added-large-files.enable = true;
+    check-yaml.enable = true;
+    nixfmt.enable = true;
+    statix.enable = true;
+    # nixpkgs' ktfmt (kotlinlang style) - the same binary CI's lint workflow runs from this flake's
+    # `ktfmt` devShell, so local and CI formatting cannot drift apart. The apps no longer use the
+    # ktfmt Gradle plugin.
+    ktfmt = {
+      enable = true;
+      name = "ktfmt";
+      entry = "${pkgs.ktfmt}/bin/ktfmt --kotlinlang-style";
+      files = "\\.kts?$";
+    };
+  };
+
+  pre-commit-check =
+    if gitHooksLib == null then
+      null
+    else
+      gitHooksLib.${system}.run {
+        src = preCommitSrc;
+        hooks = defaultPreCommitHooks // preCommitExtra;
+      };
+in
+{
+  devShells = {
+    # Just ktfmt, from the app's own locked nixpkgs: what the shared lint workflow's ktfmt job runs
+    # (`nix develop .#ktfmt`), without pulling in the Android SDK.
+    ktfmt = pkgs.mkShell { packages = [ pkgs.ktfmt ]; };
+
+    default = pkgs.mkShell {
+      buildInputs = [
+        jdk
+        android-composition
+        pkgs.just
+        pkgs.ktfmt
+      ]
+      ++ extraPackages;
+
+      shellHook = (if pre-commit-check != null then pre-commit-check.shellHook else "") + ''
+        echo "Development environment: ${appName}"
+
+        # git worktree add doesn't check out submodules by default, so a fresh agent worktree
+        # (this fleet creates a lot of them - .claude/worktrees/, .codex/worktrees/, ...) would
+        # otherwise leave .just/android-app-ci empty until someone remembers to run
+        # `git submodule update --init` by hand - which breaks every `just` invocation outright,
+        # since `import`ing a file that doesn't exist yet is a hard parse error, not a soft
+        # skip. Auto-init on every shell entry instead so this is never a manual step.
+        if [ -f .gitmodules ] && git rev-parse --git-dir >/dev/null 2>&1; then
+          git submodule update --init --recursive --quiet
+        fi
+
+        export JAVA_HOME=${jdk}/lib/openjdk
+        export ANDROID_SDK_ROOT=${android-composition}/share/android-sdk
+        export ANDROID_HOME=$ANDROID_SDK_ROOT
+        export PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
+        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin
+        export PATH=$PATH:$ANDROID_SDK_ROOT/build-tools/${buildToolsVersion}
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.project.android.aapt2FromMavenOverride=$ANDROID_SDK_ROOT/build-tools/${buildToolsVersion}/aapt2"
+
+        # Removing sdk.dir from local.properties if present, otherwise aidl fails to run.
+        if [ -f local.properties ]; then
+          sed -i -E '/^sdk\.dir=/d' local.properties
+        fi
+
+        echo "Java version: $(java -version 2>&1 | head -n1)"
+        echo "Available commands: ./gradlew, adb, aapt2, just, ktfmt"
+        echo ""
+        if [ "$(hostname)" != "rofl-13" ] && [ "$(hostname)" != "rofl-14" ]; then
+          echo "Don't run ./gradlew directly on this machine - see AGENTS.md."
+          echo "Use the 'just' recipes below, which build on rofl-13/rofl-14 instead:"
+          echo ""
+          echo "Quick start:"
+          echo "  just build                    # Build debug APK on rofl-13"
+          echo "  just build-fetch              # ...and copy it back to ./dist"
+          echo "  just --list                   # See all available recipes"
+          ${quickStart}
+        else
+          echo "Quick start (on a remote build host):"
+          echo "  ./gradlew :app:assembleDebug   # Build debug APK"
+          echo "  ./gradlew :app:installDebug    # Install to connected device"
+          echo "  ./gradlew test"
+        fi
+      '';
+    };
+  }
+  // pkgs.lib.optionalAttrs (screenshotsSystemImage != null) {
+    screenshots = pkgs.mkShell {
+      packages = [
+        pkgs.fastlane
+        android-composition-screenshots
+      ];
+
+      shellHook = ''
+        export ANDROID_SDK_ROOT=${android-composition-screenshots}/share/android-sdk
+        export ANDROID_HOME=$ANDROID_SDK_ROOT
+        export PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
+        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin
+        export PATH=$PATH:$ANDROID_SDK_ROOT/emulator
+
+        # avdmanager (XDG-aware) and emulator (not) disagree on the default AVD home when unset -
+        # avdmanager creates under XDG_CONFIG_HOME, emulator looks in ~/.android. Pin both to the
+        # same location explicitly so they agree.
+        export ANDROID_AVD_HOME="$HOME/.android/avd"
+        mkdir -p "$ANDROID_AVD_HOME"
+      '';
+    };
+  };
+}
+// {
+  # Always present (possibly empty) so callers can unconditionally write
+  # `checks.${system} = androidEnv.checks;` without an `or {}` guard.
+  checks = pkgs.lib.optionalAttrs (pre-commit-check != null) {
+    inherit pre-commit-check;
+  };
+}

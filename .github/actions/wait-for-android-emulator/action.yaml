@@ -1,0 +1,16 @@
+name: Wait for Android emulator
+description: >-
+  Waits for a booted Android emulator to actually be ready for UI input, not just for
+  sys.boot_completed to flip. reactivecircus/android-emulator-runner already waits for the
+  emulator to come up, but sys.boot_completed can flip to 1 before the device is actually ready
+  to receive UI input (settings/package manager not fully up yet) - on a freshly created AVD
+  (force-avd-creation) that race can show up as the very first UI interaction in an instrumented
+  test failing with "Failed to inject touch input". Wait for a fuller set of readiness signals
+  before doing anything else.
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for Android to be ready
+      shell: bash
+      run: bash "${{ github.action_path }}/../../../scripts/wait-for-android-emulator.sh"
