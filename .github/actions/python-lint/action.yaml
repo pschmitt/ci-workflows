@@ -9,19 +9,19 @@ inputs:
     required: false
     default: default
   requirements-file:
-    description: Optional pip requirements file to install before linting
+    description: Optional repository-relative pip requirements file (skipped if absent)
     required: false
     default: ''
   flake8-args:
-    description: Arguments for the required Flake8 check
+    description: Whitespace-separated arguments for required Flake8 (shell quoting is not supported)
     required: false
     default: '.'
   flake8-warning-args:
-    description: Optional arguments for a second advisory Flake8 check
+    description: Optional whitespace-separated arguments for advisory Flake8 (no shell quoting)
     required: false
     default: ''
   black-args:
-    description: Arguments for Black
+    description: Whitespace-separated Black arguments (shell quoting is not supported)
     required: false
     default: '--check --diff .'
 runs:
