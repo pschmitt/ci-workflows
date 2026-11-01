@@ -13,7 +13,7 @@ ship a browser extension next to a tool ([rbw](https://github.com/pschmitt/rbw),
 
 | `rust-lint.yaml` | rustfmt, clippy (`-D warnings`) and optionally cargo-deny. |
 | `extension-lint.yaml` | Builds the extension, runs the repository's checks and `web-ext lint`. |
-| `nix-aarch64.yaml` | Builds a flake's aarch64-linux packages and checks natively on an arm runner and pushes them to the niks3 S3 cache with a GitHub OIDC token (main pins `<pin-prefix>-<package>-<n>`, pull requests push unpinned). The caller needs `id-token: write`, the variable `NIKS3_SERVER_URL`, and the server must trust the repository. |
+| `nix-aarch64.yaml` | Builds a flake's aarch64-linux packages and checks natively on an arm runner and pushes them to the niks3 S3 cache with a GitHub OIDC token (main pins `<pin-prefix>-<package>-<n>`, pull requests push unpinned). The caller needs `id-token: write`, the variable `NIKS3_SERVER_URL`, and the server must trust the repository. It reads the same bucket as a substituter when the caller passes the read-only `s3_store`, `s3_access_key` and `s3_secret_key` secrets, and keeps a Nix store cache for main. |
 | `release-script.yaml` | Fails when `tools/release.sh` differs from `scripts/release.sh` here. |
 
 `scripts/verify-extension.py` is the check both signing and verification use.
