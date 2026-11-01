@@ -25,6 +25,18 @@ Callers pin these with `uses: pschmitt/ci-workflows/.github/workflows/<name>.yam
 Repositories with `nixbot.toml` also wait for successful `nixbot/nix-eval` and
 `nixbot/nix-build` checks on the exact commit before the release helper tags it.
 
+## Python
+
+After checkout, `.github/actions/python-lint` sets up the requested Python
+version and runs Flake8 and Black. For example:
+
+```yaml
+- uses: actions/checkout@v7
+- uses: pschmitt/ci-workflows/.github/actions/python-lint@main
+  with:
+    python-version: '3.15'
+```
+
 ## Android
 
 The Android interfaces were brought over from
