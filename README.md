@@ -37,6 +37,11 @@ version and runs Flake8 and Black. For example:
     python-version: '3.15'
 ```
 
+For Home Assistant integrations using `setup-uv@v5`, the
+`.github/actions/homeassistant-ruff-v5` composite runs `uvx ruff check .` and
+`uvx ruff format --check .` after the caller checks out its code. Keep the
+Hassfest job and repository-specific tests in the caller.
+
 ## Android
 
 The Android interfaces were brought over from
