@@ -3,7 +3,7 @@ description: Run the shared Ruff lint and format checks with astral-sh/setup-uv 
 runs:
   using: composite
   steps:
-    - uses: astral-sh/setup-uv@v5
+    - uses: astral-sh/setup-uv@v10.3.3
     - run: uvx ruff check .
       shell: bash
     - run: uvx ruff format --check .
