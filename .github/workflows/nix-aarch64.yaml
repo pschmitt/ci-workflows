@@ -19,9 +19,9 @@ on:
       exclude-checks:
         description: >-
           JSON list of aarch64-linux flake checks to leave out, e.g. NixOS VM tests
-          (GitHub's arm runners have no KVM). When set, `nix flake check` is skipped
-          (`--no-build` cannot evaluate checks that import from a derivation) and the
-          remaining checks are built one by one.
+          (GitHub's arm runners have no KVM). The remaining checks are built one by
+          one; `nix flake check` is not used, since it would evaluate excluded
+          packages and checks too.
         type: string
         default: "[]"
       pin-prefix:
@@ -121,12 +121,11 @@ jobs:
       - name: Flake checks
         env:
           EXCLUDE_CHECKS: ${{ inputs.exclude-checks }}
+        # Not `nix flake check`: upstream Nix evaluates every package and check
+        # of this system there, so an `exclude`d package (one that cannot even
+        # evaluate on aarch64-linux) or an `exclude-checks` entry fails it. The
+        # packages are built above; build the remaining checks one by one.
         run: |
-          if [[ "$(jq length <<< "$EXCLUDE_CHECKS")" == 0 ]]
-          then
-            nix flake check --print-build-logs
-            exit 0
-          fi
           nix eval --json .#checks.aarch64-linux --apply builtins.attrNames \
             | jq -r --argjson exclude "$EXCLUDE_CHECKS" '.[] | select(. as $name | $exclude | index($name) | not)' \
             | while read -r attr
