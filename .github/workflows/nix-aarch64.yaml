@@ -82,11 +82,15 @@ jobs:
       # determinate-nixd logs in to FlakeHub and keeps a root-only
       # /nix/var/determinate/auth_state.json, which made every
       # cache-nix-action save fail (tar: Permission denied).
+      # No store optimisation: its hard links into /nix/store/.links end up in
+      # the saved cache, and restoring it then fails ("Cannot hard link to
+      # .links/..."), leaving a store whose database lists missing paths.
       - uses: DeterminateSystems/nix-installer-action@v23
         with:
           determinate: false
           extra-conf: |
             fallback = true # build from source if a binary substitute fails
+            auto-optimise-store = false
             ${{ steps.s3.outputs.conf }}
       - uses: nix-community/cache-nix-action@v7
         with:
