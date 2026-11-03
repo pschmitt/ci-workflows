@@ -105,6 +105,13 @@ jobs:
             fallback = true # build from source if a binary substitute fails
             auto-optimise-store = false
             ${{ steps.s3.outputs.conf }}
+      # Public settings only; shows what the daemon will trust when substituting.
+      - name: Show Nix trust settings
+        run: |
+          nix --version
+          nix config show trusted-public-keys
+          nix config show require-sigs
+          sudo cat /etc/nix/nix.conf /etc/nix/nix.custom.conf 2>/dev/null | grep -E 'trusted-public-keys|include' || true
       - uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.lock') }}
