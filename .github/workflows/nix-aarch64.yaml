@@ -16,6 +16,13 @@ on:
         description: JSON list of package names to leave out (those that cannot build on aarch64-linux)
         type: string
         default: "[]"
+      exclude-checks:
+        description: >-
+          JSON list of aarch64-linux flake checks to leave out, e.g. NixOS VM tests
+          (GitHub's arm runners have no KVM). When set, the flake is evaluated with
+          `nix flake check --no-build` and the remaining checks are built one by one.
+        type: string
+        default: "[]"
       pin-prefix:
         description: Prefix of the pins main creates (the server's rule for this repository allows it), e.g. gh-rbw-main
         type: string
@@ -94,7 +101,21 @@ jobs:
               > "$RUNNER_TEMP/outs/$attr"
           done
       - name: Flake checks
-        run: nix flake check --print-build-logs
+        env:
+          EXCLUDE_CHECKS: ${{ inputs.exclude-checks }}
+        run: |
+          if [[ "$(jq length <<< "$EXCLUDE_CHECKS")" == 0 ]]
+          then
+            nix flake check --print-build-logs
+            exit 0
+          fi
+          nix flake check --no-build
+          nix eval --json .#checks.aarch64-linux --apply builtins.attrNames \
+            | jq -r --argjson exclude "$EXCLUDE_CHECKS" '.[] | select(. as $name | $exclude | index($name) | not)' \
+            | while read -r attr
+          do
+            nix build --no-link --print-build-logs ".#checks.aarch64-linux.$attr"
+          done
       - name: Push to niks3
         # Not for forks (no OIDC token) or branches other than main and pull requests.
         if: ${{ env.NIKS3_SERVER_URL != '' && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request') }}
