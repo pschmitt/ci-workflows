@@ -78,8 +78,13 @@ jobs:
           done
           sudo chown -R "$(id -u):$(id -g)" "$HOME/.aws"
           echo "conf=extra-substituters = $S3_STORE" >> "$GITHUB_OUTPUT"
+      # Upstream Nix, not Determinate Nix: with this job's OIDC token
+      # determinate-nixd logs in to FlakeHub and keeps a root-only
+      # /nix/var/determinate/auth_state.json, which made every
+      # cache-nix-action save fail (tar: Permission denied).
       - uses: DeterminateSystems/nix-installer-action@v23
         with:
+          determinate: false
           extra-conf: |
             fallback = true # build from source if a binary substitute fails
             ${{ steps.s3.outputs.conf }}
@@ -100,6 +105,18 @@ jobs:
           do
             nix build --no-link --print-build-logs --print-out-paths ".#packages.aarch64-linux.$attr" \
               > "$RUNNER_TEMP/outs/$attr"
+            # A crane package's dependency build and vendored sources are only
+            # build inputs, so pushing the package leaves them out of the cache
+            # and every source change rebuilds all dependencies. Push them too.
+            for input in cargoArtifacts cargoVendorDir
+            do
+              if [[ "$(nix eval --json ".#packages.aarch64-linux.$attr" \
+                --apply "p: p ? $input && builtins.isAttrs p.$input && p.$input ? outPath")" == true ]]
+              then
+                nix build --no-link --print-out-paths ".#packages.aarch64-linux.$attr.$input" \
+                  > "$RUNNER_TEMP/outs/$attr-$input"
+              fi
+            done
           done
       - name: Flake checks
         env:
