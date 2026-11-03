@@ -374,5 +374,12 @@
     "with": {
       "dry-run": "boolean"
     }
+  },
+  {
+    "caller": "nixos-config/.github/workflows/lint.yaml",
+    "context": "jobs.nix",
+    "component": "nix-lint.yaml",
+    "kind": "workflow",
+    "with": {}
   }
 ]

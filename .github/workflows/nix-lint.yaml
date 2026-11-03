@@ -1,0 +1,33 @@
+# statix, deadnix and nixfmt over every tracked Nix file. The linters come from
+# the caller's locked nixpkgs when it has a flake, so each repository updates
+# them on its own schedule; without a flake they come from the Nix registry.
+name: nix-lint
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - name: Install linters
+        run: |
+          inputs=()
+          if [[ -f flake.nix ]]
+          then
+            inputs=(--inputs-from .)
+          fi
+
+          nix shell "${inputs[@]}" nixpkgs#statix nixpkgs#deadnix nixpkgs#nixfmt \
+            --command printenv PATH >> "$GITHUB_PATH"
+      # !cancelled(): one run reports the findings of every linter.
+      - name: statix
+        run: statix check
+      - name: deadnix
+        if: ${{ !cancelled() }}
+        run: git ls-files -z '*.nix' | xargs -0 -r deadnix --fail
+      - name: nixfmt
+        if: ${{ !cancelled() }}
+        run: git ls-files -z '*.nix' | xargs -0 -r nixfmt --check
