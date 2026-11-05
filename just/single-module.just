@@ -45,12 +45,25 @@ gradle host=remote_host *tasks: (sync host)
 # it, Gradle silently signs with the host's throwaway ~/.android/debug.keystore, and devices
 # carrying CI-signed installs (GitHub releases / Obtainium) reject the APK with
 # INSTALL_FAILED_UPDATE_INCOMPATIBLE.
+#
+# Opt-in debug signing: an importing justfile may `export ENABLE_DEBUG_SIGNING := "true"` (or the
+# caller may set it in the environment) to stage the same keystore for debug builds, so a
+# hand-deployed debug build shares its key with CI debug APKs. It needs the same rbw_keystore_entry
+# etc. variables and defaults to off, leaving sibling apps untouched.
 build variant="debug" host=remote_host:
     #!/usr/bin/env bash
     set -euo pipefail
+    sign=false
+    if [[ "{{ variant }}" == "release" && "{{ enable_release_signing }}" == "true" ]]; then
+      sign=true
+    elif [[ "{{ variant }}" != "release" && "${ENABLE_DEBUG_SIGNING:-false}" == "true" ]]; then
+      sign=true
+    fi
+    cap_variant=Debug
+    [[ "{{ variant }}" == "release" ]] && cap_variant=Release
     git_revision=$(git describe --always --abbrev=12 --dirty --exclude=latest)
     build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    if [[ "{{ variant }}" != "release" || "{{ enable_release_signing }}" != "true" ]]; then
+    if [[ "$sign" != "true" ]]; then
       just sync "{{ host }}"
       task="assembleDebug"
       [[ "{{ variant }}" == "release" ]] && task="assembleRelease"
@@ -74,7 +87,7 @@ build variant="debug" host=remote_host:
     scp -q "$tmpdir/ci.jks" "$tmpdir/ci-keystore.env" "{{ host }}:{{ ci_tmp_dir_name }}/"
     # The keystore is shredded on the host whether or not the build succeeds.
     ssh "{{ host }}" "
-      artifact={{ remote_path }}/app/build/outputs/apk/release/app-{{ default_abi }}-release.apk
+      artifact={{ remote_path }}/app/build/outputs/apk/{{ variant }}/app-{{ default_abi }}-{{ variant }}.apk
       previous_mtime=0
       [[ -f \"\$artifact\" ]] && previous_mtime=\$(stat -c %Y \"\$artifact\")
       set -a
@@ -83,10 +96,10 @@ build variant="debug" host=remote_host:
       export CI_KEYSTORE_PATH=\$HOME/{{ ci_tmp_dir_name }}/ci.jks
       export GIT_REVISION='$git_revision'
       export BUILD_DATE='$build_date'
-      cd {{ remote_path }} && nix develop --command ./gradlew ':app:assembleRelease' {{ gradle_extra_props }} --rerun-tasks 2>&1 | tee ~/{{ ci_tmp_dir_name }}-build.log
+      cd {{ remote_path }} && nix develop --command ./gradlew ':app:assemble$cap_variant' {{ gradle_extra_props }} --rerun-tasks 2>&1 | tee ~/{{ ci_tmp_dir_name }}-build.log
       rc=\$?
       if [[ \$rc -eq 0 && (! -f \"\$artifact\" || \$(stat -c %Y \"\$artifact\") -le \$previous_mtime) ]]; then
-        echo 'release build did not refresh its APK artifact' >&2
+        echo '$cap_variant build did not refresh its APK artifact' >&2
         rc=1
       fi
       shred -u ~/{{ ci_tmp_dir_name }}/* 2>/dev/null || true
