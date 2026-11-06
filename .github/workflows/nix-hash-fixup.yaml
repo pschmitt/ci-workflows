@@ -1,0 +1,101 @@
+# Refresh the fixed-output hashes (npmDepsHash, cargoHash, vendorHash, ...) of a
+# flake's packages on a dependency-update pull request and commit them back to
+# the pull request branch, so Renovate PRs that change a lockfile build and can
+# automerge. Optionally aligns an npm package's @playwright/test with the
+# flake's nixpkgs playwright-driver first (the two must be the same version).
+#
+# The push uses a GitHub App token: a push with GITHUB_TOKEN would not start
+# the pull request's checks again. Pull requests from forks are skipped.
+name: nix-hash-fixup
+on:
+  workflow_call:
+    inputs:
+      packages:
+        description: Space-separated flake packages whose hashes nix-update refreshes (`--version=skip`).
+        type: string
+        required: true
+      playwright-dir:
+        description: Directory with a package.json whose @playwright/test follows nixpkgs' playwright-driver; empty to skip.
+        type: string
+        default: ""
+      commit-message:
+        type: string
+        default: "nix: refresh fixed-output hashes"
+    secrets:
+      app_id:
+        required: true
+      app_private_key:
+        required: true
+permissions:
+  contents: read
+jobs:
+  fixup:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.app_id }}
+          private-key: ${{ secrets.app_private_key }}
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: Align @playwright/test with nixpkgs
+        if: inputs.playwright-dir != ''
+        env:
+          DIR: ${{ inputs.playwright-dir }}
+        run: |
+          set -euo pipefail
+          want=$(nix eval --raw --inputs-from . nixpkgs#playwright-driver.version)
+          have=$(jq -r '.devDependencies["@playwright/test"] // .dependencies["@playwright/test"] // ""' "$DIR/package.json")
+          if [[ -z "$have" ]]; then
+            echo "::error::$DIR/package.json has no @playwright/test"
+            exit 1
+          fi
+          if [[ "$have" == "$want" ]]; then
+            echo "@playwright/test is already $want"
+            exit 0
+          fi
+          echo "@playwright/test $have -> $want (nixpkgs playwright-driver)"
+          section=--save-dev
+          if jq -e '.dependencies["@playwright/test"]' "$DIR/package.json" >/dev/null; then
+            section=--save-prod
+          fi
+          nix shell --inputs-from . nixpkgs#nodejs --command \
+            npm --prefix "$DIR" install --package-lock-only --ignore-scripts \
+            --save-exact "$section" "@playwright/test@$want"
+
+      - name: Refresh hashes
+        env:
+          PACKAGES: ${{ inputs.packages }}
+        run: |
+          set -euo pipefail
+          for package in $PACKAGES; do
+            nix run --inputs-from . nixpkgs#nix-update -- \
+              --flake --version=skip "$package"
+          done
+
+      - name: Commit to the pull request branch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          MESSAGE: ${{ inputs.commit-message }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Nothing to update"
+            exit 0
+          fi
+          git diff --stat
+          user_id=$(gh api "/users/${APP_SLUG}%5Bbot%5D" --jq .id)
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git commit -am "$MESSAGE"
+          git push origin "HEAD:$BRANCH"

@@ -282,6 +282,20 @@
     }
   },
   {
+    "caller": "stricknani/.github/workflows/nix-hash-fixup.yaml",
+    "context": "jobs.fixup",
+    "component": "nix-hash-fixup.yaml",
+    "kind": "workflow",
+    "with": {
+      "packages": "string",
+      "playwright-dir": "string"
+    },
+    "secrets": [
+      "app_id",
+      "app_private_key"
+    ]
+  },
+  {
     "caller": "syncwich/.github/workflows/build.yaml",
     "context": "jobs.build",
     "component": "build.yaml",
