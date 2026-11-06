@@ -139,6 +139,9 @@ jobs:
           CI_KEY_PASSWORD: ${{ secrets.CI_KEY_PASSWORD }}
           GIT_REVISION: ${{ steps.metadata.outputs.revision }}
           BUILD_DATE: ${{ steps.metadata.outputs.date }}
+          # Optional (inherited secret): lets the Sentry Android Gradle plugin upload the R8
+          # mapping of the bundle. Empty and ignored for apps without it.
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         working-directory: ${{ inputs.project-directory }}
         run: |
           args=(${{ inputs.gradle-bundle-task }} --stacktrace --build-cache)
