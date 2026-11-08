@@ -64,6 +64,16 @@ on:
         description: Play release status; use draft for the first release of a draft app.
         type: string
         default: completed
+      prebuilt-artifact:
+        description: >-
+          Optional artifact from an earlier job of the calling workflow (for example native
+          libraries built outside Gradle), downloaded before the build. Empty: none.
+        type: string
+        default: ''
+      prebuilt-artifact-path:
+        description: Where to unpack prebuilt-artifact, relative to the repository root.
+        type: string
+        default: ''
 
 concurrency:
   group: play-store-${{ github.workflow }}-${{ github.ref }}
@@ -109,6 +119,13 @@ jobs:
       - uses: pschmitt/ci-workflows/.github/actions/setup-jdk-gradle@main
         with:
           java-version: ${{ inputs.java-version }}
+
+      - name: Download prebuilt artifact
+        if: ${{ inputs.prebuilt-artifact != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.prebuilt-artifact }}
+          path: ${{ inputs.prebuilt-artifact-path }}
 
       - name: Decode CI signing keystore
         id: ci_keystore

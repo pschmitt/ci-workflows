@@ -184,6 +184,11 @@ jobs:
     secrets: inherit
 ```
 
+Files built outside Gradle in an earlier job of the caller (for example native libraries from
+`cargo ndk`) can be unpacked into the checkout before the build with `prebuilt-artifact` (the
+artifact's name) and `prebuilt-artifact-path` (relative to the repository root); add the producing
+job to the caller's `needs`.
+
 ### `play-store-assets.yaml`
 
 ```yaml
