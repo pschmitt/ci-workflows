@@ -1,0 +1,58 @@
+name: Push to niks3
+description: >-
+  Pushes Nix store paths to the niks3 S3 cache with a short-lived GitHub OIDC token, so later
+  jobs and runs substitute them (`nix-niks3` action). On the default branch the paths are pinned
+  under `<pin-prefix>-<name>` (the server's rule for the repository must allow that prefix);
+  elsewhere they are pushed unpinned and niks3's GC collects them. The niks3 server only trusts
+  the default branch and pull requests; anything else, or a missing server URL or OIDC token,
+  skips the push. The job needs `permissions: id-token: write`.
+inputs:
+  paths:
+    description: Newline-separated `name path` pairs (name = pin suffix), e.g. `stricknani /nix/store/...`
+    required: true
+  pin-prefix:
+    description: Pin prefix on the default branch, e.g. gh-stricknani-main
+    required: true
+  server-url:
+    description: niks3 server URL (repository variable NIKS3_SERVER_URL)
+    required: true
+  niks3-cli:
+    description: Flake reference of the niks3 client (the server's release)
+    required: false
+    default: github:Mic92/niks3/a79dc58832332ebd953974e71160ab69e2371d62#niks3
+runs:
+  using: composite
+  steps:
+    - name: Push the paths
+      shell: bash
+      env:
+        PATHS: ${{ inputs.paths }}
+        PIN_PREFIX: ${{ inputs.pin-prefix }}
+        NIKS3_SERVER_URL: ${{ inputs.server-url }}
+        NIKS3_CLI: ${{ inputs.niks3-cli }}
+        DEFAULT_REF: refs/heads/${{ github.event.repository.default_branch }}
+        TOKEN_SCRIPT: ${{ github.action_path }}/../../../scripts/niks3-oidc-token.py
+      run: |
+        set -euo pipefail
+        if [[ -z "$NIKS3_SERVER_URL" || -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]
+        then
+          echo "No niks3 server or GitHub OIDC token available; not pushing." >&2
+          exit 0
+        fi
+        if [[ "$GITHUB_REF" != "$DEFAULT_REF" && "$GITHUB_EVENT_NAME" != pull_request ]]
+        then
+          echo "niks3 only trusts the default branch and pull requests; not pushing." >&2
+          exit 0
+        fi
+        cli="$(nix build --no-link --print-out-paths "$NIKS3_CLI")"
+        auth=(--server-url "$NIKS3_SERVER_URL" --auth-token-script "python3 $TOKEN_SCRIPT")
+        while read -r name path
+        do
+          [[ -n "${name:-}" && -n "${path:-}" ]] || continue
+          if [[ "$GITHUB_REF" == "$DEFAULT_REF" ]]
+          then
+            "$cli/bin/niks3" push "${auth[@]}" --pin "$PIN_PREFIX-$name" "$path"
+          else
+            "$cli/bin/niks3" push "${auth[@]}" "$path"
+          fi
+        done <<< "$PATHS"

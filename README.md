@@ -70,6 +70,28 @@ The caller performs checkout and can supply `SHELLCHECK_OPTS` in its environment
 The caller owns the schedule and manual trigger and must grant `contents: write`
 and `pull-requests: write`. The workflow uses the default GitHub token.
 
+To build an x86_64 Nix output once per run and reuse it in later jobs (and runs),
+`.github/actions/nix-niks3` installs Nix with the niks3 S3 store as a
+substituter (pass the read-only `NIKS3_S3_*` secrets; without them it is plain
+Nix), and `.github/actions/niks3-push` pushes store paths there with the job's
+GitHub OIDC token (needs `id-token: write` and `NIKS3_SERVER_URL`; pinned as
+`<pin-prefix>-<name>` on the default branch, unpinned on pull requests, skipped
+elsewhere):
+
+```yaml
+- uses: pschmitt/ci-workflows/.github/actions/nix-niks3@main
+  with:
+    s3-store: ${{ secrets.NIKS3_S3_STORE }}
+    s3-access-key: ${{ secrets.NIKS3_S3_ACCESS_KEY }}
+    s3-secret-key: ${{ secrets.NIKS3_S3_SECRET_KEY }}
+- run: echo "server $(nix build --no-link --print-out-paths .#server)" > "$RUNNER_TEMP/paths"
+- uses: pschmitt/ci-workflows/.github/actions/niks3-push@main
+  with:
+    paths: ...           # "name /nix/store/..." lines
+    pin-prefix: gh-<repo>-main
+    server-url: ${{ vars.NIKS3_SERVER_URL }}
+```
+
 ## Docker
 
 `docker-build.yaml` builds and publishes multi-platform images to Docker Hub

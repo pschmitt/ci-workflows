@@ -1,0 +1,78 @@
+name: Nix with the niks3 cache
+description: >-
+  Installs upstream Nix with the niks3 S3 store as an extra substituter (read-only key), so
+  builds substitute what nixbot, the build hosts or an earlier job already pushed. Without the
+  store secrets it installs plain Nix. The same setup the nix-aarch64 workflow uses.
+inputs:
+  s3-store:
+    description: The niks3 S3 store URL (secret NIKS3_S3_STORE); empty installs Nix without it
+    required: false
+    default: ""
+  s3-access-key:
+    description: Read-only access key of the S3 store (secret NIKS3_S3_ACCESS_KEY)
+    required: false
+    default: ""
+  s3-secret-key:
+    description: Read-only secret key of the S3 store (secret NIKS3_S3_SECRET_KEY)
+    required: false
+    default: ""
+  s3-public-keys:
+    description: >-
+      Space-separated public keys that sign the paths in the S3 store (niks3 keeps the
+      uploader's signature). Without them Nix ignores those substitutes and builds again.
+    required: false
+    default: >-
+      niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
+      rofl-10:vYRBSypcO/0NnPsDxgSELIcJotU/LmZ1f6vZUKUmty0=
+      rofl-13:ESRCqy2jcftg690k98KSNqF6LgOqz1X7ZnXXE//WWD0=
+      rofl-14:XkEHSleW71wOnEnAcTZnYi/badnlAJAUxt6SIzbYsG8=
+      rofl-15:x68gyyrKadDfvJKdpPkRvmPckrYF6XqzlKaqs2xheVw=
+      rofl-16:DB8WQ415B8v3P9r1R8U4pO1iKrOAldbBHbSz+chryXI=
+      gh-actions:x+pfxw4yRpZbonnjaCR0nIm5eN1wOGAki0soDQyFjJQ=
+  extra-conf:
+    description: More nix.conf lines
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Configure the S3 cache
+      id: s3
+      shell: bash
+      env:
+        S3_STORE: ${{ inputs.s3-store }}
+        S3_ACCESS_KEY: ${{ inputs.s3-access-key }}
+        S3_SECRET_KEY: ${{ inputs.s3-secret-key }}
+        S3_PUBLIC_KEYS: ${{ inputs.s3-public-keys }}
+      run: |
+        set -euo pipefail
+        if [[ -z "$S3_STORE" || -z "$S3_ACCESS_KEY" || -z "$S3_SECRET_KEY" ]]
+        then
+          echo "conf=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # The nix-daemon (root) substitutes, the client checks the cache.
+        credentials="$(printf '[niks3]\naws_access_key_id = %s\naws_secret_access_key = %s\n' \
+          "$S3_ACCESS_KEY" "$S3_SECRET_KEY")"
+        for home in "$HOME" /root
+        do
+          sudo install -d -m 700 "$home/.aws"
+          sudo tee "$home/.aws/credentials" > /dev/null <<< "$credentials"
+          sudo chmod 600 "$home/.aws/credentials"
+        done
+        sudo chown -R "$(id -u):$(id -g)" "$HOME/.aws"
+        {
+          echo "conf<<EOF"
+          echo "extra-substituters = $S3_STORE"
+          echo "extra-trusted-public-keys = $S3_PUBLIC_KEYS"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+    # Upstream Nix, not Determinate Nix (see nix-aarch64.yaml for why).
+    - uses: DeterminateSystems/nix-installer-action@v23
+      with:
+        determinate: false
+        extra-conf: |
+          fallback = true # build from source if a binary substitute fails
+          auto-optimise-store = false
+          ${{ steps.s3.outputs.conf }}
+          ${{ inputs.extra-conf }}
