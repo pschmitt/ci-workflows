@@ -1,0 +1,224 @@
+# Build a multi-platform image with each platform on a native runner (no
+# QEMU: compiling Rust or other native code under emulation takes ages), push
+# each platform by digest, then join them into one manifest per registry.
+#
+# Tags: `latest` and `sha-<commit>` on every publish, the branch name on branch
+# pushes, and the version (without a `v` prefix) on tag pushes. The GHCR image
+# gets a build provenance attestation and an SBOM.
+#
+# The caller owns its triggers and decides when to publish (for example
+# `publish: ${{ github.event_name != 'pull_request' }}`). Without publishing
+# the images are only built, with the layer cache still read and written. The
+# calling job grants `contents: read`, and to publish `packages: write`,
+# `id-token: write` and `attestations: write`.
+name: Docker native multi-arch
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: Image name without a registry, for example pschmitt/rbw
+        type: string
+        required: true
+      registries:
+        description: JSON list of registries to publish to (ghcr.io, docker.io)
+        type: string
+        default: '["ghcr.io"]'
+      platforms:
+        description: Comma-separated platforms; linux/amd64 and linux/arm64 are supported
+        type: string
+        default: linux/amd64,linux/arm64
+      publish:
+        description: Push the images and create the manifests
+        type: boolean
+        default: true
+      context:
+        description: Build context
+        type: string
+        default: .
+      file:
+        description: Dockerfile, relative to the repository root
+        type: string
+        default: Dockerfile
+      version:
+        description: Image version label and tag; defaults to Cargo.toml's package version if there is one
+        type: string
+        default: ''
+      attest:
+        description: Attest the GHCR image's build provenance
+        type: boolean
+        default: true
+    secrets:
+      dockerhub_username:
+        required: false
+      dockerhub_password:
+        required: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: matrix
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          matrix='[]'
+          IFS=, read -ra platforms <<< "$PLATFORMS"
+          for platform in "${platforms[@]}"
+          do
+            platform="${platform// /}"
+            case "$platform" in
+              linux/amd64) runner=ubuntu-latest ;;
+              linux/arm64|linux/arm64/v8) runner=ubuntu-24.04-arm ;;
+              *)
+                echo "::error::No native runner for $platform"
+                exit 1
+                ;;
+            esac
+            matrix=$(jq -c --arg p "$platform" --arg r "$runner" \
+              '. + [{platform: $p, runner: $r, pair: ($p | gsub("/"; "-"))}]' <<< "$matrix")
+          done
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+      - id: version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -z "$VERSION" && -f Cargo.toml ]]
+          then
+            VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n1)
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: names
+        env:
+          IMAGE: ${{ inputs.image-name }}
+          REGISTRIES: ${{ inputs.registries }}
+        run: echo "names=$(jq -r --arg image "$IMAGE" 'map(. + "/" + $image) | join(",")' <<< "$REGISTRIES")" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - if: inputs.publish && contains(fromJSON(inputs.registries), 'docker.io')
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.dockerhub_username }}
+          password: ${{ secrets.dockerhub_password }}
+      - if: inputs.publish && contains(fromJSON(inputs.registries), 'ghcr.io')
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.file }}
+          platforms: ${{ matrix.platform }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          outputs: ${{ inputs.publish && format('type=image,"name={0}",push-by-digest=true,name-canonical=true,push=true', steps.names.outputs.names) || 'type=cacheonly' }}
+          provenance: ${{ inputs.publish && 'mode=max' || 'false' }}
+          sbom: ${{ inputs.publish }}
+          # Per platform, so the native builds do not evict each other.
+          cache-from: type=gha,scope=docker-${{ matrix.pair }}
+          cache-to: type=gha,mode=max,scope=docker-${{ matrix.pair }}
+      - if: inputs.publish
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - if: inputs.publish
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.pair }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [prepare, build]
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        registry: ${{ fromJSON(inputs.registries) }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+      - id: meta
+        env:
+          REGISTRY: ${{ matrix.registry }}
+          IMAGE_NAME: ${{ inputs.image-name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          image="${REGISTRY}/${IMAGE_NAME}"
+          tags=(-t "${image}:latest" -t "${image}:sha-${GITHUB_SHA}")
+          if [[ "$GITHUB_REF_TYPE" == branch ]]
+          then
+            tags+=(-t "${image}:${GITHUB_REF_NAME//\//-}")
+          elif [[ "$GITHUB_REF_TYPE" == tag && -n "$VERSION" ]]
+          then
+            tags+=(-t "${image}:${VERSION#v}")
+          fi
+          {
+            echo "image=${image}"
+            echo "tags=${tags[*]}"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - if: matrix.registry == 'docker.io'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.dockerhub_username }}
+          password: ${{ secrets.dockerhub_password }}
+      - if: matrix.registry == 'ghcr.io'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          refs=()
+          for digest in *
+          do
+            refs+=("${IMAGE}@sha256:${digest}")
+          done
+          # TAGS holds "-t ref" pairs.
+          read -ra tag_args <<< "$TAGS"
+          docker buildx imagetools create "${tag_args[@]}" \
+            --annotation "index:org.opencontainers.image.version=${VERSION}" \
+            --annotation "index:org.opencontainers.image.revision=${GITHUB_SHA}" \
+            "${refs[@]}"
+      - id: digest
+        if: matrix.registry == 'ghcr.io' && inputs.attest
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+        run: echo "digest=$(docker buildx imagetools inspect "${IMAGE}:sha-${GITHUB_SHA}" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
+      # Verify with `gh attestation verify oci://ghcr.io/OWNER/IMAGE:latest -R OWNER/REPO`.
+      - if: matrix.registry == 'ghcr.io' && inputs.attest
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ steps.meta.outputs.image }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true

@@ -100,6 +100,33 @@ Hub credentials, and grants `contents: read` and `packages: write`. For a
 non-publishing build, set `publish: false`; it skips registry logins, image
 pushes and cache export and can run with read-only permissions.
 
+`docker-native.yaml` builds each platform on a native GitHub runner instead of
+under QEMU (linux/amd64 on `ubuntu-latest`, linux/arm64 on
+`ubuntu-24.04-arm`), pushes each by digest and joins them into one manifest per
+registry (`registries`, default `["ghcr.io"]`; add `docker.io` with the Docker
+Hub secrets). It tags `latest`, `sha-<commit>`, the branch on branch pushes and
+the version on tag pushes, and attests the GHCR image. Use it for images that
+compile native code. The caller decides `publish`; to publish it grants
+`contents: read`, `packages: write`, `id-token: write` and
+`attestations: write`.
+
+```yaml
+docker:
+  permissions:
+    contents: read
+    packages: write
+    id-token: write
+    attestations: write
+  uses: pschmitt/ci-workflows/.github/workflows/docker-native.yaml@main
+  with:
+    image-name: pschmitt/example
+    registries: '["docker.io", "ghcr.io"]'
+    publish: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+  secrets:
+    dockerhub_username: ${{ secrets.DOCKER_USERNAME }}
+    dockerhub_password: ${{ secrets.DOCKER_PASSWORD }}
+```
+
 ## Android
 
 The Android interfaces were brought over from

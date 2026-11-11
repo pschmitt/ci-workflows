@@ -395,5 +395,34 @@
     "component": "nix-lint.yaml",
     "kind": "workflow",
     "with": {}
+  },
+  {
+    "caller": "luks-ssh-unlock/.github/workflows/docker.yaml",
+    "context": "jobs.docker",
+    "component": "docker-native.yaml",
+    "kind": "workflow",
+    "with": {
+      "image-name": "string",
+      "registries": "string",
+      "publish": "expression"
+    },
+    "secrets": [
+      "dockerhub_password",
+      "dockerhub_username"
+    ]
+  },
+  {
+    "caller": "luks-ssh-unlock/.github/workflows/build.yaml",
+    "context": "jobs.nix-aarch64",
+    "component": "nix-aarch64.yaml",
+    "kind": "workflow",
+    "with": {
+      "pin-prefix": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
   }
 ]
