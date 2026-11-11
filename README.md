@@ -105,7 +105,9 @@ under QEMU (linux/amd64 on `ubuntu-latest`, linux/arm64 on
 `ubuntu-24.04-arm`), pushes each by digest and joins them into one manifest per
 registry (`registries`, default `["ghcr.io"]`; add `docker.io` with the Docker
 Hub secrets). It tags `latest`, `sha-<commit>`, the branch on branch pushes and
-the version on tag pushes, and attests the GHCR image. Use it for images that
+the version on tag pushes, and attests the GHCR image. The attestation is
+signed by this reusable workflow, so verifying it needs
+`--signer-repo pschmitt/ci-workflows` next to `-R OWNER/REPO`. Use it for images that
 compile native code. The caller decides `publish`; to publish it grants
 `contents: read`, `packages: write`, `id-token: write` and
 `attestations: write`.

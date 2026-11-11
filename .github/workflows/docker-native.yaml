@@ -215,7 +215,8 @@ jobs:
         env:
           IMAGE: ${{ steps.meta.outputs.image }}
         run: echo "digest=$(docker buildx imagetools inspect "${IMAGE}:sha-${GITHUB_SHA}" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
-      # Verify with `gh attestation verify oci://ghcr.io/OWNER/IMAGE:latest -R OWNER/REPO`.
+      # Signed by this reusable workflow, so verify with
+      # `gh attestation verify oci://ghcr.io/OWNER/IMAGE:latest -R OWNER/REPO --signer-repo pschmitt/ci-workflows`.
       - if: matrix.registry == 'ghcr.io' && inputs.attest
         uses: actions/attest@v4
         with:
