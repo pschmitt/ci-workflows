@@ -424,5 +424,15 @@
       "s3_secret_key",
       "s3_store"
     ]
+  },
+  {
+    "caller": "rbw/.github/workflows/docker.yaml",
+    "context": "jobs.docker",
+    "component": "docker-native.yaml",
+    "kind": "workflow",
+    "with": {
+      "image-name": "string"
+    },
+    "secrets": []
   }
 ]
