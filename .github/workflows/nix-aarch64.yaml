@@ -28,6 +28,18 @@ on:
         description: Prefix of the pins main creates (the server's rule for this repository allows it), e.g. gh-rbw-main
         type: string
         required: true
+      image-package:
+        description: Optional aarch64 package archive to export as a workflow artifact after its package build
+        type: string
+        default: ""
+      image-artifact:
+        description: Artifact name for the optional image package archive
+        type: string
+        default: ""
+      image-archive-file:
+        description: Filename for the optional image package archive artifact
+        type: string
+        default: image.tar.gz
       s3-public-keys:
         description: >-
           Space-separated public keys that sign the paths in the S3 store. niks3 keeps
@@ -130,8 +142,24 @@ jobs:
       - name: Build the packages
         env:
           EXCLUDE: ${{ inputs.exclude }}
+          IMAGE_PACKAGE: ${{ inputs.image-package }}
+          IMAGE_ARTIFACT: ${{ inputs.image-artifact }}
+          IMAGE_ARCHIVE_FILE: ${{ inputs.image-archive-file }}
         run: |
           mkdir -p "$RUNNER_TEMP/outs"
+          if [[ -n "$IMAGE_PACKAGE$IMAGE_ARTIFACT" || "$IMAGE_ARCHIVE_FILE" != "image.tar.gz" ]]
+          then
+            if [[ -z "$IMAGE_PACKAGE" || -z "$IMAGE_ARTIFACT" || -z "$IMAGE_ARCHIVE_FILE" ]]
+            then
+              echo "Image package, artifact name and archive filename must be provided together." >&2
+              exit 1
+            fi
+            if [[ ! "$IMAGE_PACKAGE" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ || ! "$IMAGE_ARCHIVE_FILE" =~ ^[A-Za-z0-9_.-]+$ || "$IMAGE_ARCHIVE_FILE" == . || "$IMAGE_ARCHIVE_FILE" == .. ]]
+            then
+              echo "Image package or archive filename has an invalid format." >&2
+              exit 1
+            fi
+          fi
           nix eval --json .#packages.aarch64-linux --apply builtins.attrNames \
             | jq -r --argjson exclude "$EXCLUDE" '.[] | select(. as $name | $exclude | index($name) | not)' \
             | while read -r attr
@@ -151,6 +179,28 @@ jobs:
               fi
             done
           done
+          if [[ -n "$IMAGE_PACKAGE" ]]
+          then
+            image_paths="$RUNNER_TEMP/outs/$IMAGE_PACKAGE"
+            if [[ ! -s "$image_paths" ]]
+            then
+              echo "The configured image package was not built (it may be excluded)." >&2
+              exit 1
+            fi
+            mapfile -t image_outputs < "$image_paths"
+            if (( ${#image_outputs[@]} != 1 ))
+            then
+              echo "The configured image package must produce exactly one output path." >&2
+              exit 1
+            fi
+            image_path="${image_outputs[0]}"
+            if [[ -z "$image_path" || ! -f "$image_path" ]]
+            then
+              echo "The optional image package did not produce a regular archive file." >&2
+              exit 1
+            fi
+            cp --dereference "$image_path" "$RUNNER_TEMP/$IMAGE_ARCHIVE_FILE"
+          fi
       - name: Flake checks
         env:
           EXCLUDE_CHECKS: ${{ inputs.exclude-checks }}
@@ -193,3 +243,13 @@ jobs:
               index=$((index + 1))
             done < "$file"
           done
+      - name: Upload aarch64 image archive
+        if: ${{ inputs.image-package != '' && inputs.image-artifact != '' && inputs.image-archive-file != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.image-artifact }}
+          path: ${{ runner.temp }}/${{ inputs.image-archive-file }}
+          compression-level: 0
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1

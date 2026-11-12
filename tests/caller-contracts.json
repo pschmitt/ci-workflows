@@ -427,13 +427,45 @@
   },
   {
     "caller": "stricknani/.github/workflows/build.yaml",
-    "context": "jobs.docker",
+    "context": "jobs.nix-aarch64",
+    "component": "nix-aarch64.yaml",
+    "kind": "workflow",
+    "with": {
+      "image-archive-file": "string",
+      "image-artifact": "string",
+      "image-package": "string",
+      "pin-prefix": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
+  },
+  {
+    "caller": "stricknani/.github/workflows/build.yaml",
+    "context": "jobs.docker (legacy single-platform call)",
     "component": "nix-image.yaml",
     "kind": "workflow",
     "with": {
       "archive-file": "string",
       "image-name": "string",
       "prebuilt-artifact": "string",
+      "publish": "boolean",
+      "test-script": "string"
+    },
+    "secrets": []
+  },
+  {
+    "caller": "stricknani/.github/workflows/build.yaml",
+    "context": "jobs.docker (native multi-platform call)",
+    "component": "nix-image.yaml",
+    "kind": "workflow",
+    "with": {
+      "archive-file": "string",
+      "image-name": "string",
+      "platforms": "string",
+      "prebuilt-artifacts": "string",
       "publish": "boolean",
       "test-script": "string"
     },

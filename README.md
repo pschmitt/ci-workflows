@@ -133,13 +133,24 @@ docker:
     dockerhub_password: ${{ secrets.DOCKER_PASSWORD }}
 ```
 
-`nix-image.yaml` loads a Nix `dockerTools` archive from an artifact produced by
-an earlier job, or installs Nix and builds the flake output named by `package`
-(default `.#docker`). Optional read-only Niks3 secrets enable cache
-substitutions. It sets `NIX_IMAGE` to the source image name and tag while running
-the optional checked-in test script. The reusable image job requests
-`packages: write` even when `publish: false`; callers must grant that permission
-in both cases.
+`nix-image.yaml` tests Nix `dockerTools` archives on native runners. It accepts
+comma-separated `platforms` (`linux/amd64` by default; also `linux/arm64`) and a
+`prebuilt-artifacts` JSON object mapping each platform to a same-run artifact.
+Without that map, the legacy `prebuilt-artifact` remains available for a single
+platform, or the workflow installs Nix and builds the flake output named by
+`package` (default `.#docker`) on each native runner. Optional read-only Niks3
+secrets enable cache substitutions in the build fallback. Each runner checks
+the loaded image architecture and sets `NIX_IMAGE` to its name and source tag
+while running the optional checked-in test script.
+
+When publishing, each native runner publishes its tested platform manifest by
+digest, without assigning a tag. The image tags move only after every native
+test and digest upload succeeds: the workflow creates them as one OCI index and
+verifies the exact platform set. With
+`publish: false`, it runs the native tests without logging into GHCR or pushing.
+The reusable image job keeps the existing `packages: write` requirement for its
+conditional digest-publish step; callers must grant it even when publication is
+false.
 
 ```yaml
 nix-image:
@@ -151,19 +162,35 @@ nix-image:
     - run: cp --dereference result-image "$RUNNER_TEMP/stricknani-image.tar.gz"
     - uses: actions/upload-artifact@v7
       with:
-        name: nix-container
+        name: nix-container-amd64
         path: ${{ runner.temp }}/stricknani-image.tar.gz
         compression-level: 0
 
+nix-aarch64:
+  permissions:
+    contents: read
+    id-token: write
+  uses: pschmitt/ci-workflows/.github/workflows/nix-aarch64.yaml@main
+  with:
+    pin-prefix: gh-stricknani-main
+    image-package: stricknani-docker
+    image-artifact: nix-container-arm64
+    image-archive-file: stricknani-image.tar.gz
+  secrets:
+    s3_store: ${{ secrets.NIKS3_S3_STORE }}
+    s3_access_key: ${{ secrets.NIKS3_S3_ACCESS_KEY }}
+    s3_secret_key: ${{ secrets.NIKS3_S3_SECRET_KEY }}
+
 publish-image:
-  needs: nix-image
+  needs: [nix-image, nix-aarch64]
   permissions:
     contents: read
     packages: write # Required even when publish is false.
   uses: pschmitt/ci-workflows/.github/workflows/nix-image.yaml@main
   with:
     image-name: ghcr.io/pschmitt/stricknani
-    prebuilt-artifact: nix-container
+    platforms: linux/amd64,linux/arm64
+    prebuilt-artifacts: '{"linux/amd64":"nix-container-amd64","linux/arm64":"nix-container-arm64"}'
     archive-file: stricknani-image.tar.gz
     test-script: ci/verify-container.sh
     publish: ${{ github.event_name != 'pull_request' }}

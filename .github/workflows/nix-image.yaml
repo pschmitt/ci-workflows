@@ -1,8 +1,9 @@
 name: Nix container image
 
-# The caller owns triggers and the Nix package graph. An artifact from an earlier
-# producer job avoids another build entirely; without it, build the flake output.
-# The flake supplies image metadata, runtime configuration and layers.
+# The caller owns triggers and the Nix package graph. Producer artifacts avoid
+# rebuilding; each requested platform is loaded and tested on its native runner.
+# Digests are published only after every native test passes, then one index is
+# attached to the image tags.
 on:
   workflow_call:
     inputs:
@@ -18,12 +19,20 @@ on:
         description: Flake image output, used only without a prebuilt artifact
         type: string
         default: .#docker
+      platforms:
+        description: Comma-separated native platforms; linux/amd64 and linux/arm64 are supported
+        type: string
+        default: linux/amd64
       prebuilt-artifact:
-        description: Same-run artifact containing a Nix dockerTools image archive
+        description: Legacy single-platform artifact containing a Nix dockerTools image archive
         type: string
         default: ''
+      prebuilt-artifacts:
+        description: JSON object mapping each requested platform to its same-run producer artifact name
+        type: string
+        default: '{}'
       archive-file:
-        description: Archive filename inside the artifact
+        description: Archive filename inside each artifact
         type: string
         default: image.tar.gz
       test-script:
@@ -35,7 +44,7 @@ on:
         type: boolean
         default: false
       runner:
-        description: Native runner for the image architecture
+        description: Native runner for linux/amd64; linux/arm64 uses ubuntu-24.04-arm
         type: string
         default: ubuntu-latest
     secrets:
@@ -50,8 +59,121 @@ permissions:
   contents: read
 
 jobs:
-  image:
-    runs-on: ${{ inputs.runner }}
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      expected-platforms: ${{ steps.matrix.outputs.expected-platforms }}
+      platform-count: ${{ steps.matrix.outputs.platform-count }}
+      has-prebuilt-artifacts: ${{ steps.matrix.outputs.has-prebuilt-artifacts }}
+    steps:
+      - id: matrix
+        env:
+          PLATFORM_INPUT: ${{ inputs.platforms }}
+          PREBUILT_ARTIFACT: ${{ inputs.prebuilt-artifact }}
+          PREBUILT_ARTIFACTS: ${{ inputs.prebuilt-artifacts }}
+          AMD64_RUNNER: ${{ inputs.runner }}
+          ARCHIVE_FILE: ${{ inputs.archive-file }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ "$ARCHIVE_FILE" =~ ^[A-Za-z0-9_.-]+$ && "$ARCHIVE_FILE" != . && "$ARCHIVE_FILE" != .. ]] || {
+            echo "archive-file must be a filename without a path" >&2
+            exit 1
+          }
+          jq -e 'type == "object"' <<< "$PREBUILT_ARTIFACTS" >/dev/null || {
+            echo "prebuilt-artifacts must be a JSON object" >&2
+            exit 1
+          }
+          PREBUILT_ARTIFACTS="$(jq -c . <<< "$PREBUILT_ARTIFACTS")"
+          has_artifact_map=false
+          if [[ "$(jq 'length' <<< "$PREBUILT_ARTIFACTS")" -gt 0 ]]
+          then
+            has_artifact_map=true
+          fi
+          if [[ "$has_artifact_map" == true && -n "$PREBUILT_ARTIFACT" ]]
+          then
+            echo "Use either prebuilt-artifact or prebuilt-artifacts, not both" >&2
+            exit 1
+          fi
+
+          matrix='[]'
+          expected='[]'
+          platform_count=0
+          declare -A seen=()
+          IFS=, read -ra platforms <<< "$PLATFORM_INPUT"
+          for platform in "${platforms[@]}"
+          do
+            platform="${platform//[[:space:]]/}"
+            [[ -n "$platform" ]] || continue
+            if [[ -n "${seen[$platform]:-}" ]]
+            then
+              echo "Duplicate platform: $platform" >&2
+              exit 1
+            fi
+            seen[$platform]=1
+            case "$platform" in
+              linux/amd64)
+                runner="$AMD64_RUNNER"
+                pair=linux-amd64
+                ;;
+              linux/arm64)
+                runner=ubuntu-24.04-arm
+                pair=linux-arm64
+                ;;
+              *)
+                echo "Unsupported platform: $platform" >&2
+                exit 1
+                ;;
+            esac
+            platform_count=$((platform_count + 1))
+            if [[ -n "$PREBUILT_ARTIFACT" && "$platform_count" -gt 1 ]]
+            then
+              echo "prebuilt-artifact supports one platform; use prebuilt-artifacts for multiple platforms" >&2
+              exit 1
+            fi
+            artifact="$(jq -r --arg platform "$platform" '.[$platform] // empty' <<< "$PREBUILT_ARTIFACTS")"
+            if [[ -n "$artifact" ]]
+            then
+              :
+            elif [[ "$has_artifact_map" == true ]]
+            then
+              echo "prebuilt-artifacts has no artifact for $platform" >&2
+              exit 1
+            fi
+            matrix="$(jq -c --arg platform "$platform" --arg runner "$runner" --arg pair "$pair" \
+              '. + [{platform: $platform, runner: $runner, pair: $pair}]' <<< "$matrix")"
+            expected="$(jq -c --arg platform "$platform" '. + [$platform]' <<< "$expected")"
+          done
+          [[ "$matrix" != '[]' ]] || {
+            echo "At least one platform is required" >&2
+            exit 1
+          }
+          if [[ "$has_artifact_map" == true ]]
+          then
+            for platform in "${!seen[@]}"
+            do
+              jq -e --arg platform "$platform" '.[$platform] | type == "string" and length > 0' \
+                <<< "$PREBUILT_ARTIFACTS" >/dev/null || {
+                echo "prebuilt-artifacts must map $platform to a non-empty artifact name" >&2
+                exit 1
+              }
+            done
+          fi
+          {
+            echo "matrix=$matrix"
+            echo "expected-platforms=$(jq -r 'sort | join(",")' <<< "$expected")"
+            echo "platform-count=$(jq -r 'length' <<< "$expected")"
+            echo "has-prebuilt-artifacts=$has_artifact_map"
+          } >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -61,14 +183,21 @@ jobs:
           persist-credentials: false
 
       - name: Download the producer's image
-        if: inputs.prebuilt-artifact != ''
+        if: needs.prepare.outputs.has-prebuilt-artifacts == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ fromJSON(inputs.prebuilt-artifacts)[matrix.platform] }}
+          path: ${{ runner.temp }}/nix-image
+
+      - name: Download the legacy single-platform image
+        if: needs.prepare.outputs.has-prebuilt-artifacts != 'true' && inputs.prebuilt-artifact != ''
         uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.prebuilt-artifact }}
           path: ${{ runner.temp }}/nix-image
 
       - name: Install Nix with the niks3 cache
-        if: inputs.prebuilt-artifact == ''
+        if: needs.prepare.outputs.has-prebuilt-artifacts != 'true' && inputs.prebuilt-artifact == ''
         uses: pschmitt/ci-workflows/.github/actions/nix-niks3@main
         with:
           s3-store: ${{ secrets.s3_store }}
@@ -76,7 +205,7 @@ jobs:
           s3-secret-key: ${{ secrets.s3_secret_key }}
 
       - name: Build the Nix image
-        if: inputs.prebuilt-artifact == ''
+        if: needs.prepare.outputs.has-prebuilt-artifacts != 'true' && inputs.prebuilt-artifact == ''
         env:
           FLAKE_PACKAGE: ${{ inputs.package }}
           ARCHIVE_FILE: ${{ inputs.archive-file }}
@@ -87,7 +216,7 @@ jobs:
           cp "$image" "$RUNNER_TEMP/nix-image/$ARCHIVE_FILE"
 
       - name: Remove Niks3 credentials before running the image test
-        if: always() && inputs.prebuilt-artifact == '' && env.REMOVE_NIKS3_CREDENTIALS == 'true'
+        if: always() && needs.prepare.outputs.has-prebuilt-artifacts != 'true' && inputs.prebuilt-artifact == '' && env.REMOVE_NIKS3_CREDENTIALS == 'true'
         shell: bash
         env:
           REMOVE_NIKS3_CREDENTIALS: ${{ secrets.s3_store != '' && secrets.s3_access_key != '' && secrets.s3_secret_key != '' }}
@@ -99,16 +228,98 @@ jobs:
       - name: Load and verify the image
         env:
           ARCHIVE_FILE: ${{ inputs.archive-file }}
+          PLATFORM: ${{ matrix.platform }}
           NIX_IMAGE: ${{ inputs.image-name }}:${{ inputs.source-tag }}
           TEST_SCRIPT: ${{ inputs.test-script }}
         run: |
           set -Eeuo pipefail
           docker load --input "$RUNNER_TEMP/nix-image/$ARCHIVE_FILE"
-          docker image inspect "$NIX_IMAGE" > /dev/null
+          actual="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$NIX_IMAGE")"
+          expected="$PLATFORM"
+          case "$expected" in
+            linux/arm64) ;;
+            linux/amd64) ;;
+            *) echo "Unsupported platform: $expected" >&2; exit 1 ;;
+          esac
+          [[ "$actual" == "$expected" ]] || {
+            echo "Image platform mismatch: expected $expected, found $actual" >&2
+            exit 1
+          }
           if [[ -n "$TEST_SCRIPT" ]]
           then
             bash -- "$TEST_SCRIPT"
           fi
+
+      - name: Log in to GHCR
+        if: inputs.publish
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Install Skopeo
+        if: inputs.publish
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes skopeo
+
+      - name: Convert and publish the tested platform manifest by digest
+        if: inputs.publish
+        id: digest
+        env:
+          NIX_IMAGE: ${{ inputs.image-name }}:${{ inputs.source-tag }}
+          IMAGE_NAME: ${{ inputs.image-name }}
+          PAIR: ${{ matrix.pair }}
+        run: |
+          set -Eeuo pipefail
+          oci_archive="$RUNNER_TEMP/$PAIR.oci.tar"
+          source_digest_file="$RUNNER_TEMP/$PAIR.oci.digest"
+          published_digest_file="$RUNNER_TEMP/$PAIR.published.digest"
+          skopeo copy --format oci --digestfile "$source_digest_file" \
+            "docker-daemon:$NIX_IMAGE" "oci-archive:$oci_archive:tested"
+          source_digest="$(cat "$source_digest_file")"
+          [[ "$source_digest" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+            echo "Skopeo returned an invalid OCI manifest digest" >&2
+            exit 1
+          }
+          skopeo copy --preserve-digests --retry-times 3 --retry-delay 2s \
+            --digestfile "$published_digest_file" \
+            "oci-archive:$oci_archive:tested" "docker://$IMAGE_NAME@$source_digest"
+          published_digest="$(cat "$published_digest_file")"
+          [[ "$published_digest" == "$source_digest" ]] || {
+            echo "Registry manifest digest differs from the precomputed OCI digest" >&2
+            exit 1
+          }
+          [[ "$published_digest" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+            echo "Skopeo returned an invalid image digest" >&2
+            exit 1
+          }
+          mkdir -p "$RUNNER_TEMP/digests"
+          cp "$published_digest_file" "$RUNNER_TEMP/digests/$PAIR"
+
+      - name: Upload the platform digest
+        if: inputs.publish
+        uses: actions/upload-artifact@v7
+        with:
+          name: nix-image-digest-${{ matrix.pair }}
+          path: ${{ runner.temp }}/digests/${{ matrix.pair }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-index:
+    needs: [prepare, test]
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: nix-image-digest-*
+          merge-multiple: true
 
       - name: Extract publishing tags
         id: meta
@@ -122,24 +333,61 @@ jobs:
             type=ref,event=pr
             type=sha
 
+      - uses: docker/setup-buildx-action@v4
+
       - name: Log in to GHCR
-        if: inputs.publish
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Publish the verified image
-        if: inputs.publish
+      - name: Publish and verify the multi-platform index
         env:
-          NIX_IMAGE: ${{ inputs.image-name }}:${{ inputs.source-tag }}
+          DIGEST_DIR: ${{ runner.temp }}/digests
+          IMAGE_NAME: ${{ inputs.image-name }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          EXPECTED_PLATFORMS: ${{ needs.prepare.outputs.expected-platforms }}
+          EXPECTED_COUNT: ${{ needs.prepare.outputs.platform-count }}
         run: |
           set -Eeuo pipefail
+          refs=()
+          count=0
+          for digest_file in "$DIGEST_DIR"/*
+          do
+            [[ -f "$digest_file" ]] || continue
+            digest="$(cat "$digest_file")"
+            [[ "$digest" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+              echo "Invalid platform digest in $digest_file" >&2
+              exit 1
+            }
+            refs+=("$IMAGE_NAME@$digest")
+            count=$((count + 1))
+          done
+          [[ "$count" == "$EXPECTED_COUNT" ]] || {
+            echo "Expected $EXPECTED_COUNT tested image digests, found $count" >&2
+            exit 1
+          }
+
+          tag_args=()
           while IFS= read -r tag
           do
             [[ -n "$tag" ]] || continue
-            docker tag "$NIX_IMAGE" "$tag"
-            docker push "$tag"
+            tag_args+=(--tag "$tag")
+          done <<< "$IMAGE_TAGS"
+          ((${#tag_args[@]} > 0)) || {
+            echo "No image tags were produced" >&2
+            exit 1
+          }
+          docker buildx imagetools create "${tag_args[@]}" "${refs[@]}"
+
+          while IFS= read -r tag
+          do
+            [[ -n "$tag" ]] || continue
+            actual="$(docker buildx imagetools inspect "$tag" --raw \
+              | jq -r '[.manifests[] | "\(.platform.os)/\(.platform.architecture)"] | sort | join(",")')"
+            [[ "$actual" == "$EXPECTED_PLATFORMS" ]] || {
+              echo "Published index $tag has platforms $actual; expected $EXPECTED_PLATFORMS" >&2
+              exit 1
+            }
           done <<< "$IMAGE_TAGS"
