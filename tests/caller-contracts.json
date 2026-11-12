@@ -412,9 +412,27 @@
     ]
   },
   {
-    "caller": "luks-ssh-unlock/.github/workflows/build.yaml",
-    "context": "jobs.nix-aarch64",
-    "component": "nix-aarch64.yaml",
+    "caller": "stricknani/.github/workflows/build.yaml",
+    "context": "jobs.nix",
+    "component": "nix-build.yaml",
+    "kind": "workflow",
+    "with": {
+      "image-archive-file": "string",
+      "image-artifact": "string",
+      "image-package": "string",
+      "pin-prefix": "string",
+      "producer-metadata-artifact": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
+  },
+  {
+    "caller": "stricknani/.github/workflows/build.yaml",
+    "context": "jobs.nix-checks",
+    "component": "nix-checks.yaml",
     "kind": "workflow",
     "with": {
       "pin-prefix": "string"
@@ -428,13 +446,32 @@
   {
     "caller": "stricknani/.github/workflows/build.yaml",
     "context": "jobs.nix-aarch64",
-    "component": "nix-aarch64.yaml",
+    "component": "nix-build.yaml",
     "kind": "workflow",
     "with": {
       "image-archive-file": "string",
       "image-artifact": "string",
       "image-package": "string",
-      "pin-prefix": "string"
+      "pin-prefix": "string",
+      "runner": "string",
+      "system": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
+  },
+  {
+    "caller": "stricknani/.github/workflows/build.yaml",
+    "context": "jobs.nix-aarch64-checks",
+    "component": "nix-checks.yaml",
+    "kind": "workflow",
+    "with": {
+      "full-flake-check": "boolean",
+      "pin-prefix": "string",
+      "runner": "string",
+      "system": "string"
     },
     "secrets": [
       "s3_access_key",
@@ -480,5 +517,106 @@
       "image-name": "string"
     },
     "secrets": []
+  },
+  {
+    "caller": "monarch/.github/workflows/ci.yml",
+    "context": "jobs.nix-aarch64",
+    "component": "nix-build.yaml",
+    "kind": "workflow",
+    "with": {
+      "pin-prefix": "string",
+      "runner": "string",
+      "system": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
+  },
+  {
+    "caller": "monarch/.github/workflows/ci.yml",
+    "context": "jobs.nix-aarch64-checks",
+    "component": "nix-checks.yaml",
+    "kind": "workflow",
+    "with": {
+      "exclude-checks": "string",
+      "full-flake-check": "boolean",
+      "pin-prefix": "string",
+      "runner": "string",
+      "system": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
+  },
+  {
+    "caller": "anika-blue/.github/workflows/test.yaml",
+    "context": "jobs.nix-aarch64",
+    "component": "nix-build.yaml",
+    "kind": "workflow",
+    "with": {
+      "pin-prefix": "string",
+      "runner": "string",
+      "system": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
+  },
+  {
+    "caller": "anika-blue/.github/workflows/test.yaml",
+    "context": "jobs.nix-aarch64-checks",
+    "component": "nix-checks.yaml",
+    "kind": "workflow",
+    "with": {
+      "exclude-checks": "string",
+      "full-flake-check": "boolean",
+      "pin-prefix": "string",
+      "runner": "string",
+      "system": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
+  },
+  {
+    "caller": "luks-ssh-unlock/.github/workflows/build.yaml",
+    "context": "jobs.nix-aarch64",
+    "component": "nix-build.yaml",
+    "kind": "workflow",
+    "with": {
+      "pin-prefix": "string",
+      "runner": "string",
+      "system": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
+  },
+  {
+    "caller": "luks-ssh-unlock/.github/workflows/build.yaml",
+    "context": "jobs.nix-aarch64-checks",
+    "component": "nix-checks.yaml",
+    "kind": "workflow",
+    "with": {
+      "full-flake-check": "boolean",
+      "pin-prefix": "string",
+      "runner": "string",
+      "system": "string"
+    },
+    "secrets": [
+      "s3_access_key",
+      "s3_secret_key",
+      "s3_store"
+    ]
   }
 ]

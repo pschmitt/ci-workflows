@@ -1,0 +1,129 @@
+name: nix-build
+# Build Nix packages on a native runner and publish their outputs to niks3.
+# Optional artifacts expose an already-built image archive and exact source identity.
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Native GitHub runner for the requested Nix system
+        type: string
+        default: ubuntu-latest
+      system:
+        description: Native Nix system to build
+        type: string
+        default: x86_64-linux
+      packages:
+        description: JSON array of package attributes; an empty array builds every native package
+        type: string
+        default: "[]"
+      exclude:
+        description: JSON array of package attributes to omit
+        type: string
+        default: "[]"
+      pin-prefix:
+        description: Prefix of pins made on the default branch
+        type: string
+        required: true
+      extra-conf:
+        description: Additional Nix configuration lines
+        type: string
+        default: ""
+      image-package:
+        description: Optional package attribute whose single output is an image archive
+        type: string
+        default: ""
+      image-artifact:
+        description: Optional workflow artifact name for the image archive
+        type: string
+        default: ""
+      image-archive-file:
+        description: Filename used for the optional image archive artifact
+        type: string
+        default: image.tar.gz
+      producer-metadata-artifact:
+        description: Optional artifact name for source and workflow run identity metadata
+        type: string
+        default: ""
+    secrets:
+      s3_store:
+        description: Niks3 S3 store URL
+        required: false
+      s3_access_key:
+        description: Read-only S3 access key
+        required: false
+      s3_secret_key:
+        description: Read-only S3 secret key
+        required: false
+permissions:
+  contents: read
+  id-token: write
+env:
+  NIKS3_SERVER_URL: ${{ vars.NIKS3_SERVER_URL }}
+jobs:
+  build:
+    name: build
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: pschmitt/ci-workflows
+          path: .ci-workflows
+          persist-credentials: false
+      - uses: pschmitt/ci-workflows/.github/actions/nix-niks3@main
+        with:
+          s3-store: ${{ secrets.s3_store }}
+          s3-access-key: ${{ secrets.s3_access_key }}
+          s3-secret-key: ${{ secrets.s3_secret_key }}
+          extra-conf: ${{ inputs.extra-conf }}
+      - name: Build selected packages and collect reusable paths
+        id: build
+        env:
+          SYSTEM: ${{ inputs.system }}
+          PACKAGES: ${{ inputs.packages }}
+          EXCLUDE: ${{ inputs.exclude }}
+          IMAGE_PACKAGE: ${{ inputs.image-package }}
+          IMAGE_ARTIFACT: ${{ inputs.image-artifact }}
+          IMAGE_ARCHIVE_FILE: ${{ inputs.image-archive-file }}
+          OUTPUT_DIR: ${{ runner.temp }}
+        run: |
+          bash .ci-workflows/scripts/nix-build.sh
+          {
+            echo 'paths<<EOF'
+            cat "$RUNNER_TEMP/nix-paths"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+      - name: Push package and dependency outputs to niks3
+        if: ${{ steps.build.outputs.paths != '' }}
+        uses: pschmitt/ci-workflows/.github/actions/niks3-push@main
+        with:
+          paths: ${{ steps.build.outputs.paths }}
+          pin-prefix: ${{ inputs.pin-prefix }}
+          server-url: ${{ env.NIKS3_SERVER_URL }}
+      - name: Create producer source metadata
+        if: ${{ inputs.producer-metadata-artifact != '' }}
+        run: |
+          python3 .ci-workflows/scripts/nix-producer-metadata.py "$RUNNER_TEMP/nix-producer.json"
+      - name: Upload producer source metadata
+        if: ${{ inputs.producer-metadata-artifact != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.producer-metadata-artifact }}
+          path: ${{ runner.temp }}/nix-producer.json
+          compression-level: 0
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+      - name: Upload Nix image archive
+        if: ${{ inputs.image-package != '' && inputs.image-artifact != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.image-artifact }}
+          path: ${{ runner.temp }}/${{ inputs.image-archive-file }}
+          compression-level: 0
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1

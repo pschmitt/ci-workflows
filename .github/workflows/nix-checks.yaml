@@ -1,0 +1,132 @@
+name: nix-checks
+# Native flake checks run after their package producer, so Nix can substitute its outputs
+# from niks3. Full checks are the default. On runners without KVM, callers can select only
+# the supported checks with full-flake-check: false and exclude-checks.
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Native runner for the requested Nix system
+        type: string
+        default: ubuntu-latest
+      system:
+        description: Nix system whose flake checks to run
+        type: string
+        default: x86_64-linux
+      full-flake-check:
+        description: Run the full `nix flake check` before collecting its check outputs
+        type: boolean
+        default: true
+      exclude-checks:
+        description: JSON array of checks to skip when full-flake-check is false
+        type: string
+        default: "[]"
+      pin-prefix:
+        description: Prefix of the pins created on the default branch, e.g. gh-rbw-main
+        type: string
+        required: true
+      extra-conf:
+        description: Additional Nix configuration lines
+        type: string
+        default: ""
+    secrets:
+      s3_store:
+        description: The niks3 S3 store URL, added as a substituter with the read-only key below
+        required: false
+      s3_access_key:
+        description: Read-only access key of the niks3 S3 store
+        required: false
+      s3_secret_key:
+        description: Read-only secret key of the niks3 S3 store
+        required: false
+permissions:
+  contents: read
+  id-token: write
+env:
+  NIKS3_SERVER_URL: ${{ vars.NIKS3_SERVER_URL }}
+jobs:
+  checks:
+    name: checks
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pschmitt/ci-workflows/.github/actions/nix-niks3@main
+        with:
+          s3-store: ${{ secrets.s3_store }}
+          s3-access-key: ${{ secrets.s3_access_key }}
+          s3-secret-key: ${{ secrets.s3_secret_key }}
+          extra-conf: ${{ inputs.extra-conf }}
+      - name: Verify system and check options
+        env:
+          SYSTEM: ${{ inputs.system }}
+          FULL_FLAKE_CHECK: ${{ inputs.full-flake-check }}
+          EXCLUDE_CHECKS: ${{ inputs.exclude-checks }}
+        run: |
+          set -euo pipefail
+          actual_system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          if [[ "$actual_system" != "$SYSTEM" ]]
+          then
+            printf 'Requested Nix system does not match this runner.\n' >&2
+            exit 1
+          fi
+          if ! jq -e 'type == "array" and all(.[]; type == "string")' <<< "$EXCLUDE_CHECKS" > /dev/null
+          then
+            printf 'exclude-checks must be a JSON array of strings.\n' >&2
+            exit 1
+          fi
+          excluded_count="$(jq 'length' <<< "$EXCLUDE_CHECKS")"
+          if [[ "$FULL_FLAKE_CHECK" == true && "$excluded_count" -gt 0 ]]
+          then
+            printf 'exclude-checks requires full-flake-check to be false.\n' >&2
+            exit 1
+          fi
+      - name: Run flake checks and collect outputs
+        id: checks
+        env:
+          SYSTEM: ${{ inputs.system }}
+          FULL_FLAKE_CHECK: ${{ inputs.full-flake-check }}
+          EXCLUDE_CHECKS: ${{ inputs.exclude-checks }}
+        run: |
+          set -euo pipefail
+          if [[ "$FULL_FLAKE_CHECK" == true ]]
+          then
+            nix flake check
+          fi
+
+          mkdir -p "$RUNNER_TEMP"
+          nix eval --json ".#checks.$SYSTEM" --apply builtins.attrNames \
+            | jq -r --argjson exclude "$EXCLUDE_CHECKS" \
+              '.[] | select(. as $name | $exclude | index($name) | not)' \
+            > "$RUNNER_TEMP/check-attributes"
+          : > "$RUNNER_TEMP/check-paths"
+          declare -A seen_paths=()
+          while IFS= read -r attr
+          do
+            [[ -n "$attr" ]] || continue
+            nix build --no-link --print-build-logs --print-out-paths \
+              ".#checks.$SYSTEM.$attr" > "$RUNNER_TEMP/check-outputs"
+            index=0
+            while IFS= read -r path
+            do
+              if [[ -n "$path" && -z "${seen_paths[$path]+present}" ]]
+              then
+                seen_paths["$path"]=1
+                printf 'check-%s-%s %s\n' "$attr" "$index" "$path" \
+                  >> "$RUNNER_TEMP/check-paths"
+              fi
+              index=$((index + 1))
+            done < "$RUNNER_TEMP/check-outputs"
+          done < "$RUNNER_TEMP/check-attributes"
+          {
+            echo 'paths<<EOF'
+            cat "$RUNNER_TEMP/check-paths"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+      - name: Push check outputs to niks3
+        if: ${{ steps.checks.outputs.paths != '' }}
+        uses: pschmitt/ci-workflows/.github/actions/niks3-push@main
+        with:
+          paths: ${{ steps.checks.outputs.paths }}
+          pin-prefix: ${{ inputs.pin-prefix }}
+          server-url: ${{ env.NIKS3_SERVER_URL }}

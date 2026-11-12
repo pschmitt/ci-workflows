@@ -13,7 +13,9 @@ and [bruvtab](https://github.com/pschmitt/bruvtab).
 | `rust-lint.yaml` | rustfmt, clippy (`-D warnings`) and optionally cargo-deny. |
 | `extension-lint.yaml` | Builds the extension, runs the repository's checks and `web-ext lint`. |
 | `nix-lint.yaml` | statix, deadnix and nixfmt over every tracked Nix file, with the linters from the caller's locked nixpkgs. The caller owns the triggers and should run on `**.nix` and `flake.lock`. |
-| `nix-aarch64.yaml` | Uses sequential `build` and `checks` jobs on native arm runners to build a flake's aarch64-linux packages and checks, then pushes their outputs to the niks3 S3 cache with a GitHub OIDC token (main pins `<pin-prefix>-<package>-<n>` and `<pin-prefix>-check-<check>-<n>`; pull requests push unpinned). For crane packages it also pushes their dependency build and vendored sources (`cargoArtifacts`, `cargoVendorDir`, pinned as `<pin-prefix>-<package>-<input>-<n>`), so a source change does not rebuild every dependency. The caller needs `id-token: write`, the variable `NIKS3_SERVER_URL`, and the server must trust the repository. It reads the same bucket as a substituter (trusting the keys its paths are signed with, `s3-public-keys`) when the caller passes the read-only `s3_store`, `s3_access_key` and `s3_secret_key` secrets and keeps a Nix store cache for main. `exclude` leaves out packages and `exclude-checks` flake checks that cannot run there (NixOS VM tests: the runners have no KVM). |
+| `nix-build.yaml` | Builds selected Nix package outputs on a native runner, pushes package and dependency paths to niks3, and can upload image and producer-metadata artifacts. |
+| `nix-checks.yaml` | Runs native flake checks, collects their outputs and pushes those paths to niks3 for later jobs and runs. |
+| `nix-aarch64.yaml` | Compatibility workflow with sequential `build` and `checks` jobs on native arm runners to build a flake's aarch64-linux packages and checks, then push their outputs to the niks3 S3 cache with a GitHub OIDC token (main pins `<pin-prefix>-<package>-<n>` and `<pin-prefix>-check-<check>-<n>`; pull requests push unpinned). For crane packages it also pushes their dependency build and vendored sources (`cargoArtifacts`, `cargoVendorDir`, pinned as `<pin-prefix>-<package>-<input>-<n>`), so a source change does not rebuild every dependency. The caller needs `id-token: write`, the variable `NIKS3_SERVER_URL`, and the server must trust the repository. It reads the same bucket as a substituter (trusting the keys its paths are signed with, `s3-public-keys`) when the caller passes the read-only `s3_store`, `s3_access_key` and `s3_secret_key` secrets and keeps a Nix store cache for main. `exclude` leaves out packages and `exclude-checks` flake checks that cannot run there (NixOS VM tests: the runners have no KVM). |
 | `nix-image.yaml` | Loads a same-run Nix `dockerTools` image artifact or builds a flake image output, runs an optional caller test script, then optionally publishes the verified image to GHCR. |
 | `nix-hash-fixup.yaml` | On a dependency-update pull request (Renovate), refreshes the fixed-output hashes of the given flake `packages` with `nix-update --version=skip` (npmDepsHash, cargoHash, vendorHash, ...) and commits them to the pull request branch. With `playwright-dir`, it first pins that package's `@playwright/test` to the flake's nixpkgs `playwright-driver` version. It pushes as the `pschmitt-ci` GitHub App (secrets `app_id`, `app_private_key`; the app needs Contents read & write on the repository) so the pull request's checks run again; forks are skipped. Callers trigger it on `pull_request` for their lockfiles and list the bot (`<id>+pschmitt-ci[bot]@users.noreply.github.com`) in Renovate's `gitIgnoredAuthors`. Logo: `docs/pschmitt-ci.svg`. |
 | `release-script.yaml` | Fails when `tools/release.sh` differs from `scripts/release.sh` here. |
@@ -95,6 +97,32 @@ elsewhere):
     pin-prefix: gh-<repo>-main
     server-url: ${{ vars.NIKS3_SERVER_URL }}
 ```
+
+`nix-build.yaml` has one `build` job. Its inputs are `runner`
+(`ubuntu-latest`), `system` (`x86_64-linux`), `packages` (`[]`), `exclude`
+(`[]`), required `pin-prefix`, `extra-conf` (empty), `image-package` (empty),
+`image-artifact` (empty), `image-archive-file` (`image.tar.gz`) and
+`producer-metadata-artifact` (empty). Package and exclusion lists are JSON
+arrays; an empty `packages` list builds all packages for the selected system,
+minus `exclude`. The job pushes package outputs and crane dependency outputs to
+niks3 before uploading configured image and producer-metadata artifacts. It
+relies on niks3 for store reuse instead of a GitHub Nix store cache. Set
+`image-package` and `image-artifact` together to upload the package's single
+archive output as `image-archive-file`; `producer-metadata-artifact` separately
+uploads the source and workflow-run identity JSON.
+
+`nix-checks.yaml` has one `checks` job with `runner` (`ubuntu-latest`),
+`system` (`x86_64-linux`), `full-flake-check` (`true`), `exclude-checks`
+(`[]`), required `pin-prefix` and `extra-conf` (empty). It verifies that Nix's
+native system matches `system`. Full flake validation is the default; when
+`full-flake-check` is false, it builds each check not listed in
+`exclude-checks`. A nonempty exclusion list requires that mode. Check outputs
+are deduplicated and pushed to niks3 with pins named
+`<pin-prefix>-check-<attribute>-<index>` on the default branch; pull-request
+paths remain unpinned. Run this gate after the matching `nix-build.yaml`
+producer so checks can substitute its package paths.
+Both workflows accept the optional read-only `s3_store`, `s3_access_key` and
+`s3_secret_key` secrets; their jobs need `id-token: write` to publish to niks3.
 
 ## Docker
 

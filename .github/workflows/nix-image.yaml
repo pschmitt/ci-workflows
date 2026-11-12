@@ -283,7 +283,7 @@ jobs:
             echo "Skopeo returned an invalid OCI manifest digest" >&2
             exit 1
           }
-          skopeo copy --preserve-digests --retry-times 3 --retry-delay 2s \
+          skopeo copy --preserve-digests --retry-times 3 \
             --digestfile "$published_digest_file" \
             "oci-archive:$oci_archive:tested" "docker://$IMAGE_NAME@$source_digest"
           published_digest="$(cat "$published_digest_file")"
