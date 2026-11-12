@@ -28,6 +28,9 @@ workflow's `dry-run` input to `true` for a safe manual validation.
 
 Repositories with `nixbot.toml` also wait for successful `nixbot/nix-eval` and
 `nixbot/nix-build` checks on the exact commit before the release helper tags it.
+A cancelled job whose name matches `RELEASE_OPTIONAL_JOBS` (an extended regex,
+default `macos`) does not block the tag: scarce macOS runners get cancelled before
+they start, which says nothing about the code. Failed jobs always block.
 
 ## Python
 
