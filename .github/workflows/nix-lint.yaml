@@ -7,12 +7,12 @@ on:
 permissions:
   contents: read
 jobs:
-  lint:
+  statix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
-      - name: Install linters
+      - name: Install statix
         run: |
           inputs=()
           if [[ -f flake.nix ]]
@@ -20,14 +20,41 @@ jobs:
             inputs=(--inputs-from .)
           fi
 
-          nix shell "${inputs[@]}" nixpkgs#statix nixpkgs#deadnix nixpkgs#nixfmt \
+          nix shell "${inputs[@]}" nixpkgs#statix \
             --command printenv PATH >> "$GITHUB_PATH"
-      # !cancelled(): one run reports the findings of every linter.
-      - name: statix
-        run: statix check
+      - run: statix check
+
+  deadnix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - name: Install deadnix
+        run: |
+          inputs=()
+          if [[ -f flake.nix ]]
+          then
+            inputs=(--inputs-from .)
+          fi
+
+          nix shell "${inputs[@]}" nixpkgs#deadnix \
+            --command printenv PATH >> "$GITHUB_PATH"
       - name: deadnix
-        if: ${{ !cancelled() }}
         run: git ls-files -z '*.nix' | xargs -0 -r deadnix --fail
-      - name: nixfmt
-        if: ${{ !cancelled() }}
-        run: git ls-files -z '*.nix' | xargs -0 -r nixfmt --check
+
+  nixfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - name: Install nixfmt
+        run: |
+          inputs=()
+          if [[ -f flake.nix ]]
+          then
+            inputs=(--inputs-from .)
+          fi
+
+          nix shell "${inputs[@]}" nixpkgs#nixfmt \
+            --command printenv PATH >> "$GITHUB_PATH"
+      - run: git ls-files -z '*.nix' | xargs -0 -r nixfmt --check
