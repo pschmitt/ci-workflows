@@ -1,0 +1,145 @@
+name: Nix container image
+
+# The caller owns triggers and the Nix package graph. An artifact from an earlier
+# producer job avoids another build entirely; without it, build the flake output.
+# The flake supplies image metadata, runtime configuration and layers.
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: GHCR image name without a tag, e.g. ghcr.io/owner/project
+        type: string
+        required: true
+      source-tag:
+        description: Tag embedded in the Nix image archive
+        type: string
+        default: latest
+      package:
+        description: Flake image output, used only without a prebuilt artifact
+        type: string
+        default: .#docker
+      prebuilt-artifact:
+        description: Same-run artifact containing a Nix dockerTools image archive
+        type: string
+        default: ''
+      archive-file:
+        description: Archive filename inside the artifact
+        type: string
+        default: image.tar.gz
+      test-script:
+        description: Optional checked-in Bash script to verify the loaded image before publication; NIX_IMAGE contains its name and tag
+        type: string
+        default: ''
+      publish:
+        description: Publish the tested image to GHCR; false only builds, loads and tests
+        type: boolean
+        default: false
+      runner:
+        description: Native runner for the image architecture
+        type: string
+        default: ubuntu-latest
+    secrets:
+      s3_store:
+        required: false
+      s3_access_key:
+        required: false
+      s3_secret_key:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download the producer's image
+        if: inputs.prebuilt-artifact != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.prebuilt-artifact }}
+          path: ${{ runner.temp }}/nix-image
+
+      - name: Install Nix with the niks3 cache
+        if: inputs.prebuilt-artifact == ''
+        uses: pschmitt/ci-workflows/.github/actions/nix-niks3@main
+        with:
+          s3-store: ${{ secrets.s3_store }}
+          s3-access-key: ${{ secrets.s3_access_key }}
+          s3-secret-key: ${{ secrets.s3_secret_key }}
+
+      - name: Build the Nix image
+        if: inputs.prebuilt-artifact == ''
+        env:
+          FLAKE_PACKAGE: ${{ inputs.package }}
+          ARCHIVE_FILE: ${{ inputs.archive-file }}
+        run: |
+          set -Eeuo pipefail
+          image="$(nix build --no-link --print-build-logs --print-out-paths "$FLAKE_PACKAGE")"
+          mkdir -p "$RUNNER_TEMP/nix-image"
+          cp "$image" "$RUNNER_TEMP/nix-image/$ARCHIVE_FILE"
+
+      - name: Remove Niks3 credentials before running the image test
+        if: always() && inputs.prebuilt-artifact == '' && env.REMOVE_NIKS3_CREDENTIALS == 'true'
+        shell: bash
+        env:
+          REMOVE_NIKS3_CREDENTIALS: ${{ secrets.s3_store != '' && secrets.s3_access_key != '' && secrets.s3_secret_key != '' }}
+        run: |
+          set -Eeuo pipefail
+          rm -f "$HOME/.aws/credentials"
+          sudo rm -f /root/.aws/credentials
+
+      - name: Load and verify the image
+        env:
+          ARCHIVE_FILE: ${{ inputs.archive-file }}
+          NIX_IMAGE: ${{ inputs.image-name }}:${{ inputs.source-tag }}
+          TEST_SCRIPT: ${{ inputs.test-script }}
+        run: |
+          set -Eeuo pipefail
+          docker load --input "$RUNNER_TEMP/nix-image/$ARCHIVE_FILE"
+          docker image inspect "$NIX_IMAGE" > /dev/null
+          if [[ -n "$TEST_SCRIPT" ]]
+          then
+            bash -- "$TEST_SCRIPT"
+          fi
+
+      - name: Extract publishing tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ inputs.image-name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=sha
+
+      - name: Log in to GHCR
+        if: inputs.publish
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish the verified image
+        if: inputs.publish
+        env:
+          NIX_IMAGE: ${{ inputs.image-name }}:${{ inputs.source-tag }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -Eeuo pipefail
+          while IFS= read -r tag
+          do
+            [[ -n "$tag" ]] || continue
+            docker tag "$NIX_IMAGE" "$tag"
+            docker push "$tag"
+          done <<< "$IMAGE_TAGS"

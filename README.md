@@ -14,6 +14,7 @@ and [bruvtab](https://github.com/pschmitt/bruvtab).
 | `extension-lint.yaml` | Builds the extension, runs the repository's checks and `web-ext lint`. |
 | `nix-lint.yaml` | statix, deadnix and nixfmt over every tracked Nix file, with the linters from the caller's locked nixpkgs. The caller owns the triggers and should run on `**.nix` and `flake.lock`. |
 | `nix-aarch64.yaml` | Builds a flake's aarch64-linux packages and checks natively on an arm runner and pushes them to the niks3 S3 cache with a GitHub OIDC token (main pins `<pin-prefix>-<package>-<n>`, pull requests push unpinned). For crane packages it also pushes their dependency build and vendored sources (`cargoArtifacts`, `cargoVendorDir`, pinned as `<pin-prefix>-<package>-<input>-<n>`), so a source change does not rebuild every dependency. The caller needs `id-token: write`, the variable `NIKS3_SERVER_URL`, and the server must trust the repository. It reads the same bucket as a substituter (trusting the keys its paths are signed with, `s3-public-keys`) when the caller passes the read-only `s3_store`, `s3_access_key` and `s3_secret_key` secrets and keeps a Nix store cache for main. `exclude` leaves out packages and `exclude-checks` flake checks that cannot run there (NixOS VM tests: the runners have no KVM). |
+| `nix-image.yaml` | Loads a same-run Nix `dockerTools` image artifact or builds a flake image output, runs an optional caller test script, then optionally publishes the verified image to GHCR. |
 | `nix-hash-fixup.yaml` | On a dependency-update pull request (Renovate), refreshes the fixed-output hashes of the given flake `packages` with `nix-update --version=skip` (npmDepsHash, cargoHash, vendorHash, ...) and commits them to the pull request branch. With `playwright-dir`, it first pins that package's `@playwright/test` to the flake's nixpkgs `playwright-driver` version. It pushes as the `pschmitt-ci` GitHub App (secrets `app_id`, `app_private_key`; the app needs Contents read & write on the repository) so the pull request's checks run again; forks are skipped. Callers trigger it on `pull_request` for their lockfiles and list the bot (`<id>+pschmitt-ci[bot]@users.noreply.github.com`) in Renovate's `gitIgnoredAuthors`. Logo: `docs/pschmitt-ci.svg`. |
 | `release-script.yaml` | Fails when `tools/release.sh` differs from `scripts/release.sh` here. |
 | `github-release.yaml` | Generates changelog text from the previous tag and creates a GitHub release. `dry-run: true` validates changelog generation without creating the release. |
@@ -130,6 +131,42 @@ docker:
   secrets:
     dockerhub_username: ${{ secrets.DOCKER_USERNAME }}
     dockerhub_password: ${{ secrets.DOCKER_PASSWORD }}
+```
+
+`nix-image.yaml` loads a Nix `dockerTools` archive from an artifact produced by
+an earlier job, or installs Nix and builds the flake output named by `package`
+(default `.#docker`). Optional read-only Niks3 secrets enable cache
+substitutions. It sets `NIX_IMAGE` to the source image name and tag while running
+the optional checked-in test script. The reusable image job requests
+`packages: write` even when `publish: false`; callers must grant that permission
+in both cases.
+
+```yaml
+nix-image:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v7
+    - uses: pschmitt/ci-workflows/.github/actions/nix-niks3@main
+    - run: nix build --out-link result-image .#stricknani-docker
+    - run: cp --dereference result-image "$RUNNER_TEMP/stricknani-image.tar.gz"
+    - uses: actions/upload-artifact@v7
+      with:
+        name: nix-container
+        path: ${{ runner.temp }}/stricknani-image.tar.gz
+        compression-level: 0
+
+publish-image:
+  needs: nix-image
+  permissions:
+    contents: read
+    packages: write # Required even when publish is false.
+  uses: pschmitt/ci-workflows/.github/workflows/nix-image.yaml@main
+  with:
+    image-name: ghcr.io/pschmitt/stricknani
+    prebuilt-artifact: nix-container
+    archive-file: stricknani-image.tar.gz
+    test-script: ci/verify-container.sh
+    publish: ${{ github.event_name != 'pull_request' }}
 ```
 
 ## Android

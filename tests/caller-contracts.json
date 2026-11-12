@@ -426,6 +426,20 @@
     ]
   },
   {
+    "caller": "stricknani/.github/workflows/build.yaml",
+    "context": "jobs.docker",
+    "component": "nix-image.yaml",
+    "kind": "workflow",
+    "with": {
+      "archive-file": "string",
+      "image-name": "string",
+      "prebuilt-artifact": "string",
+      "publish": "boolean",
+      "test-script": "string"
+    },
+    "secrets": []
+  },
+  {
     "caller": "rbw/.github/workflows/docker.yaml",
     "context": "jobs.docker",
     "component": "docker-native.yaml",
