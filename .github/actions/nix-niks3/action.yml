@@ -76,3 +76,62 @@ runs:
           auto-optimise-store = false
           ${{ steps.s3.outputs.conf }}
           ${{ inputs.extra-conf }}
+    # v23 adds build-provenance-tags to extra-conf unconditionally, but upstream Nix
+    # does not support that Determinate-only setting. Remove only that assignment.
+    - name: Remove unsupported upstream Nix setting
+      shell: bash
+      run: |
+        set -euo pipefail
+        config_dir="$(mktemp -d)"
+        trap 'rm -rf "$config_dir"' EXIT
+        capability="$(NIX_CONF_DIR="$config_dir" NIX_USER_CONF_FILES='' NIX_CONFIG='' \
+          nix --extra-experimental-features nix-command config show --json | python3 -c '
+        import json, sys
+        print("supported" if "build-provenance-tags" in json.load(sys.stdin) else "unsupported")
+        ')"
+        if [[ "$capability" == "supported" ]]
+        then
+          exit 0
+        fi
+        if [[ "$capability" != "unsupported" ]]
+        then
+          printf 'Could not inspect Nix setting support.\n' >&2
+          exit 1
+        fi
+        sudo python3 - <<'PY'
+        import os
+        import re
+        import stat
+        import tempfile
+        from pathlib import Path
+
+        setting = re.compile(rb"^\s*build-provenance-tags\s*=")
+        for config_name in ("/etc/nix/nix.conf", "/etc/nix/nix.custom.conf"):
+            config = Path(config_name)
+            if not config.exists():
+                continue
+            config = config.resolve(strict=True)
+            lines = config.read_bytes().splitlines(keepends=True)
+            kept = [line for line in lines if not setting.match(line)]
+            if len(kept) == len(lines):
+                continue
+            if Path("/nix/store") in config.parents:
+                raise SystemExit(
+                    "Unsupported Nix setting is in immutable configuration."
+                )
+            metadata = config.stat()
+            descriptor, temporary_name = tempfile.mkstemp(dir=config.parent)
+            try:
+                with os.fdopen(descriptor, "wb") as temporary:
+                    os.fchown(temporary.fileno(), metadata.st_uid, metadata.st_gid)
+                    os.fchmod(temporary.fileno(), stat.S_IMODE(metadata.st_mode))
+                    temporary.write(b"".join(kept))
+                    temporary.flush()
+                    os.fsync(temporary.fileno())
+                os.replace(temporary_name, config)
+            finally:
+                try:
+                    os.unlink(temporary_name)
+                except FileNotFoundError:
+                    pass
+        PY
