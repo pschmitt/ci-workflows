@@ -93,6 +93,14 @@ on:
         description: Delete release assets on the rolling "latest" tag that this run didn't (re)upload
         type: boolean
         default: true
+      fdroid-metadata-directory:
+        description: >-
+          Directory (relative to project-directory) with one <package>/metadata.yml (and optional
+          icon.png) per app. When it exists, the validated fdroid-metadata.zip built from it is
+          attached to the release beside the APKs, for the F-Droid publisher (docs/fdroid-metadata.md).
+          Nothing happens when the directory does not exist; set empty to disable.
+        type: string
+        default: fdroid
       verify-git-revision:
         description: >-
           Grep every release APK's dex for the exact commit SHA (BuildConfig.GIT_REVISION). Only
@@ -344,9 +352,19 @@ jobs:
           done
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
 
+      - name: Build F-Droid metadata archive
+        if: inputs.fdroid-metadata-directory != ''
+        uses: pschmitt/ci-workflows/.github/actions/fdroid-metadata@main
+        with:
+          directory: ${{ inputs.project-directory }}/${{ inputs.fdroid-metadata-directory }}
+          output-directory: ${{ steps.apks.outputs.dir }}
+
       - name: Generate checksums
+        # The metadata archive, when present, is covered (and attested) like the APKs.
         working-directory: ${{ steps.apks.outputs.dir }}
-        run: sha256sum -- *.apk > SHA256SUMS
+        run: |
+          shopt -s nullglob
+          sha256sum -- *.apk *.zip > SHA256SUMS
 
       - name: Attest build provenance
         # Signed SLSA build provenance for every APK, keyed off the checksums file just generated

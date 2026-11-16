@@ -1,0 +1,37 @@
+name: Build F-Droid metadata archive
+description: >-
+  Validates an app's fdroid/ directory (per-package metadata.yml and optional icon.png) and packs it
+  into the reproducible fdroid-metadata.zip (schema 1) that the F-Droid publisher imports from the
+  release the APKs are attached to. Does nothing when the directory does not exist.
+
+inputs:
+  directory:
+    description: Directory holding one subdirectory per package (<package>/metadata.yml, <package>/icon.png)
+    required: false
+    default: fdroid
+  output-directory:
+    description: Directory to write fdroid-metadata.zip to, usually the directory of the release assets
+    required: true
+
+outputs:
+  path:
+    description: Path to the archive; empty when the directory does not exist
+    value: ${{ steps.build.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build fdroid-metadata.zip
+      id: build
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.directory }}
+        OUTPUT: ${{ inputs.output-directory }}
+      run: |
+        python=python3
+        if ! python3 -c 'import yaml' 2>/dev/null; then
+          python3 -m venv "$RUNNER_TEMP/fdroid-metadata-venv"
+          "$RUNNER_TEMP/fdroid-metadata-venv/bin/pip" install --quiet 'pyyaml==6.0.2'
+          python="$RUNNER_TEMP/fdroid-metadata-venv/bin/python"
+        fi
+        "$python" "$GITHUB_ACTION_PATH/build.py" "$SOURCE" "$OUTPUT"

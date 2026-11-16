@@ -154,6 +154,10 @@ jobs:
     secrets: inherit
 ```
 
+`release.yaml` attaches an `fdroid-metadata.zip` to the release when the repository has an
+`fdroid/` directory (`fdroid-metadata-directory` input); see
+[fdroid-metadata.md](fdroid-metadata.md).
+
 All build, lint, release, and Play Store reusable workflows accept the same optional
 `project-directory` input. Paths such as `release-apk-paths`, `debug-apk-paths`, `aab-path`, and
 `lint-report-path` are interpreted relative to it; artifact uploads are resolved back against the

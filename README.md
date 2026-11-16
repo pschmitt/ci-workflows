@@ -242,6 +242,10 @@ Existing callers can continue using the original repository during migration.
 | `screenshots-open-pr.yaml` | Collect screenshot artifacts and open or update a PR. |
 
 Call these through `pschmitt/ci-workflows/.github/workflows/<name>.yaml@main`.
+
+`release.yaml` also attaches `fdroid-metadata.zip`, built by
+`.github/actions/fdroid-metadata` from the app's `fdroid/` directory, for the F-Droid
+publisher; see [F-Droid metadata archive](docs/fdroid-metadata.md).
 Composite actions live in `.github/actions/`; screenshot capture remains in
 the caller, and can invoke `scripts/wait-for-android-emulator.sh` inside the
 emulator runner. Shared Just recipes and the Nix devShell helper remain at

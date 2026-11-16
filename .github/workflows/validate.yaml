@@ -20,6 +20,9 @@ jobs:
           python -m pip install --disable-pip-version-check PyYAML==6.0.2
           python scripts/check-shared-interfaces.py
 
+      - name: Test the F-Droid metadata archive builder
+        run: python -m unittest tests/test_fdroid_metadata.py
+
       - name: Lint workflows
         uses: raven-actions/actionlint@v2
         with:
