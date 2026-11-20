@@ -87,7 +87,7 @@ build variant="debug" host=remote_host:
     scp -q "$tmpdir/ci.jks" "$tmpdir/ci-keystore.env" "{{ host }}:{{ ci_tmp_dir_name }}/"
     # The keystore is shredded on the host whether or not the build succeeds.
     ssh "{{ host }}" "
-      artifact={{ remote_path }}/app/build/outputs/apk/{{ variant }}/app-{{ default_abi }}-{{ variant }}.apk
+      artifact={{ remote_path }}/app/build/outputs/apk/{{ variant }}/app{{ if default_abi != '' { '-' + default_abi } else { '' } }}-{{ variant }}.apk
       previous_mtime=0
       [[ -f \"\$artifact\" ]] && previous_mtime=\$(stat -c %Y \"\$artifact\")
       set -a
