@@ -1,0 +1,101 @@
+name: nix-consumer-build
+# Builds packages of the calling flake with a consumer flake's nixpkgs pin and
+# pins them in niks3. A consumer that sets `inputs.<repo>.inputs.nixpkgs.follows`
+# (nixos-config does) gets different store paths than the caller's own lock
+# builds, so it would compile them itself, aarch64 ones under emulation. Run this
+# on pushes to main: the consumer's next bump then substitutes the result, until
+# the consumer moves its nixpkgs pin again. The caller needs `id-token: write`,
+# the variable NIKS3_SERVER_URL, and niks3 must allow `<pin-prefix>-*` for it.
+on:
+  workflow_call:
+    inputs:
+      packages:
+        description: Space-separated flake attributes to build, e.g. `packages.aarch64-linux.default`
+        type: string
+        required: true
+      pin-prefix:
+        description: Prefix of the pins (the server's rule for this repository must allow it), e.g. gh-rbw-main-nixos-config
+        type: string
+        required: true
+      consumer:
+        description: GitHub repository whose flake.lock provides the nixpkgs pin
+        type: string
+        default: pschmitt/nixos-config
+      consumer-ref:
+        description: Branch or commit of the consumer to read flake.lock from
+        type: string
+        default: main
+      consumer-input:
+        description: Root input of the consumer's lock that the caller's nixpkgs follows
+        type: string
+        default: nixpkgs
+      runner:
+        description: Runner, native for the packages' system
+        type: string
+        default: ubuntu-26.04-arm
+    secrets:
+      s3_store:
+        description: The niks3 S3 store URL, added as a substituter (with the read-only key below)
+        required: false
+      s3_access_key:
+        description: Read-only access key of the S3 store
+        required: false
+      s3_secret_key:
+        description: Read-only secret key of the S3 store
+        required: false
+permissions:
+  contents: read
+  id-token: write
+env:
+  NIKS3_SERVER_URL: ${{ vars.NIKS3_SERVER_URL }}
+  # The niks3 client of the server's release.
+  NIKS3_CLI: github:Mic92/niks3/a79dc58832332ebd953974e71160ab69e2371d62#niks3
+jobs:
+  build:
+    name: build
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: pschmitt/ci-workflows
+          path: .ci-workflows
+      - uses: pschmitt/ci-workflows/.github/actions/nix-niks3@main
+        with:
+          s3-store: ${{ secrets.s3_store }}
+          s3-access-key: ${{ secrets.s3_access_key }}
+          s3-secret-key: ${{ secrets.s3_secret_key }}
+          extra-conf: |
+            fallback = true
+      - name: Build with the consumer's nixpkgs
+        env:
+          CONSUMER: ${{ inputs.consumer }}
+          CONSUMER_REF: ${{ inputs.consumer-ref }}
+          CONSUMER_INPUT: ${{ inputs.consumer-input }}
+          PACKAGES: ${{ inputs.packages }}
+        run: |
+          set -o pipefail
+          nixpkgs="$(curl -fsSL "https://raw.githubusercontent.com/$CONSUMER/$CONSUMER_REF/flake.lock" \
+            | jq -er --arg input "$CONSUMER_INPUT" '.nodes[.nodes.root.inputs[$input]].locked
+              | select(.type == "github") | "github:\(.owner)/\(.repo)/\(.rev)"')"
+          echo "$CONSUMER $CONSUMER_INPUT: $nixpkgs"
+          read -ra attrs <<< "$PACKAGES"
+          nix build --no-link --print-build-logs --print-out-paths \
+            --override-input nixpkgs "$nixpkgs" "${attrs[@]/#/.#}" \
+            > "$RUNNER_TEMP/out"
+          cat "$RUNNER_TEMP/out"
+      - name: Push to niks3
+        if: ${{ env.NIKS3_SERVER_URL != '' }}
+        env:
+          PIN_PREFIX: ${{ inputs.pin-prefix }}
+        run: |
+          cli="$(nix build --no-link --print-out-paths "$NIKS3_CLI")"
+          index=0
+          while read -r path
+          do
+            "$cli/bin/niks3" push --server-url "$NIKS3_SERVER_URL" \
+              --auth-token-script "python3 $GITHUB_WORKSPACE/.ci-workflows/scripts/niks3-oidc-token.py" \
+              --pin "$PIN_PREFIX-$index" "$path"
+            index=$((index + 1))
+          done < "$RUNNER_TEMP/out"
