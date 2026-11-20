@@ -73,7 +73,7 @@ jobs:
           # formatting fix (below) can be pushed straight back onto it.
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@v32
       - name: Check with ktfmt
         id: ktfmt_check
         env:
