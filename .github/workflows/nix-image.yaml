@@ -39,6 +39,10 @@ on:
         description: Optional checked-in Bash script to verify the loaded image before publication; NIX_IMAGE contains its name and tag
         type: string
         default: ''
+      source-ref:
+        description: Optional source revision containing the image test script
+        type: string
+        default: ''
       publish:
         description: Publish the tested image to GHCR; false only builds, loads and tests
         type: boolean
@@ -181,6 +185,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.source-ref || github.sha }}
 
       - name: Download the producer's image
         if: needs.prepare.outputs.has-prebuilt-artifacts == 'true'
