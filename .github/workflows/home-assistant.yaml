@@ -1,0 +1,33 @@
+name: Validate Home Assistant integration
+
+on:
+  workflow_call:
+    inputs:
+      lint-path:
+        description: Workspace-relative path for Ruff
+        type: string
+        default: '.'
+
+permissions:
+  contents: read
+
+jobs:
+  hassfest:
+    name: Hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: home-assistant/actions/hassfest@master
+
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pschmitt/ci-workflows/.github/actions/homeassistant-ruff-v10@main
+        with:
+          path: ${{ inputs.lint-path }}

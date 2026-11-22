@@ -1,10 +1,16 @@
 name: Home Assistant Ruff checks (uv v10)
 description: Run the shared Ruff lint and format checks with astral-sh/setup-uv v10.
+inputs:
+  path:
+    description: Workspace-relative path for Ruff
+    default: '.'
 runs:
   using: composite
   steps:
     - uses: astral-sh/setup-uv@v10.3.3
-    - run: uvx ruff check .
+    - run: |
+        uvx ruff check -- "$RUFF_PATH"
+        uvx ruff format --check -- "$RUFF_PATH"
       shell: bash
-    - run: uvx ruff format --check .
-      shell: bash
+      env:
+        RUFF_PATH: ${{ inputs.path }}
