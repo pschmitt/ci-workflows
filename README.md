@@ -33,8 +33,9 @@ Callers reference these with `uses: pschmitt/ci-workflows/.github/workflows/<nam
 Keep tag-push and manual-dispatch triggers in each caller; set the reusable
 workflow's `dry-run` input to `true` for a safe manual validation.
 
-Repositories with `nixbot.toml` also wait for successful `nixbot/nix-eval` and
-`nixbot/nix-build` checks on the exact commit before the release helper tags it.
+Repositories with `nixbot.toml` also wait for successful Circus `main` and
+`main-arm` jobsets on the exact commit. Set `RELEASE_CIRCUS_JOBSETS` to select
+different jobsets, or `RELEASE_NIX_CI=nixbot` for a repository still on nixbot.
 A cancelled job whose name matches `RELEASE_OPTIONAL_JOBS` (an extended regex,
 default `macos`) does not block the tag: scarce macOS runners get cancelled before
 they start, which says nothing about the code. Failed jobs always block.

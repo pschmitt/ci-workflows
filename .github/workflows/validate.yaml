@@ -23,6 +23,9 @@ jobs:
       - name: Test the F-Droid metadata archive builder
         run: python -m unittest tests/test_fdroid_metadata.py
 
+      - name: Test release gates
+        run: python -m unittest tests/test_release_gate.py
+
       - name: Test cache-only Circus artifact consumers
         run: python -m unittest tests/test_circus_artifacts.py
 
