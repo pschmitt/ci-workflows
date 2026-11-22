@@ -13,8 +13,19 @@ main() {
   local image_package="${IMAGE_PACKAGE:-}"
   local image_artifact="${IMAGE_ARTIFACT:-}"
   local archive_file="${IMAGE_ARCHIVE_FILE:-image.tar.gz}"
+  local cache_only="${CIRCUS_CACHE_ONLY:-false}"
   local output_dir="${OUTPUT_DIR:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}}"
   local available_file actual_system attr input supported image_path
+  local -a nix_cmd=(nix)
+
+  if [[ "$cache_only" == true ]]
+  then
+    nix_cmd+=(--option max-jobs 0 --option builders "" --option fallback false --option allow-import-from-derivation false)
+  elif [[ "$cache_only" != false ]]
+  then
+    die 'CIRCUS_CACHE_ONLY must be true or false.'
+    return 1
+  fi
 
   if [[ ! "$system" =~ ^[A-Za-z0-9_-]+$ ]]
   then
@@ -65,7 +76,7 @@ main() {
     die 'Could not create the Nix output directory.'
     return 1
   }
-  actual_system="$(nix eval --impure --raw --expr builtins.currentSystem)" || {
+  actual_system="$("${nix_cmd[@]}" eval --impure --raw --expr builtins.currentSystem)" || {
     die 'Could not determine the runner Nix system.'
     return 1
   }
@@ -76,7 +87,7 @@ main() {
   fi
 
   available_file="$output_dir/nix-packages"
-  nix eval --json ".#packages.$system" --apply builtins.attrNames > "$available_file" || {
+  "${nix_cmd[@]}" eval --json ".#packages.$system" --apply builtins.attrNames > "$available_file" || {
     die 'Could not list native flake packages.'
     return 1
   }
@@ -164,7 +175,7 @@ main() {
     local index=0
     local path
 
-    nix build --no-link --print-build-logs --print-out-paths "$installable" > "$output_file" || {
+    "${nix_cmd[@]}" build --no-link --print-build-logs --print-out-paths "$installable" > "$output_file" || {
       die 'A selected Nix package or dependency build failed.'
       return 1
     }
@@ -198,9 +209,10 @@ main() {
   do
     [[ -n "$attr" ]] || continue
     build_one "$attr" ".#packages.$system.$attr" || return 1
+    [[ "$cache_only" == true ]] && continue
     for input in cargoArtifacts cargoVendorDir
     do
-      supported="$(nix eval --json ".#packages.$system.$attr" \
+      supported="$("${nix_cmd[@]}" eval --json ".#packages.$system.$attr" \
         --apply "p: p ? $input && builtins.isAttrs p.$input && p.$input ? outPath")" || {
         die 'Could not inspect package dependency outputs.'
         return 1

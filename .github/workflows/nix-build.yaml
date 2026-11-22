@@ -44,6 +44,10 @@ on:
         description: Optional artifact name for source and workflow run identity metadata
         type: string
         default: ""
+      circus-cache-only:
+        description: Fetch Circus-published outputs without building them
+        type: boolean
+        default: false
     secrets:
       s3_store:
         description: Niks3 S3 store URL
@@ -65,6 +69,18 @@ jobs:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 180
     steps:
+      - name: Verify the Circus artifact event
+        if: ${{ inputs.circus-cache-only }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          STATUS_CONTEXT: ${{ github.event.context }}
+          STATUS_STATE: ${{ github.event.state }}
+          STATUS_SHA: ${{ github.event.sha }}
+        run: |
+          test "$EVENT_NAME" = status
+          test "$STATUS_CONTEXT" = circus/artifacts
+          test "$STATUS_STATE" = success
+          test "$STATUS_SHA" = "$GITHUB_SHA"
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -89,6 +105,7 @@ jobs:
           IMAGE_ARTIFACT: ${{ inputs.image-artifact }}
           IMAGE_ARCHIVE_FILE: ${{ inputs.image-archive-file }}
           OUTPUT_DIR: ${{ runner.temp }}
+          CIRCUS_CACHE_ONLY: ${{ inputs.circus-cache-only }}
         run: |
           bash .ci-workflows/scripts/nix-build.sh
           {
@@ -97,7 +114,7 @@ jobs:
             echo EOF
           } >> "$GITHUB_OUTPUT"
       - name: Push package and dependency outputs to niks3
-        if: ${{ steps.build.outputs.paths != '' }}
+        if: ${{ !inputs.circus-cache-only && steps.build.outputs.paths != '' }}
         uses: pschmitt/ci-workflows/.github/actions/niks3-push@main
         with:
           paths: ${{ steps.build.outputs.paths }}

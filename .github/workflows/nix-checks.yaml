@@ -29,6 +29,10 @@ on:
         description: Additional Nix configuration lines
         type: string
         default: ""
+      circus-cache-only:
+        description: Accept the completed Circus artifact event instead of rebuilding checks
+        type: boolean
+        default: false
     secrets:
       s3_store:
         description: The niks3 S3 store URL, added as a substituter with the read-only key below
@@ -50,14 +54,29 @@ jobs:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 120
     steps:
+      - name: Verify the Circus artifact event
+        if: ${{ inputs.circus-cache-only }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          STATUS_CONTEXT: ${{ github.event.context }}
+          STATUS_STATE: ${{ github.event.state }}
+          STATUS_SHA: ${{ github.event.sha }}
+        run: |
+          test "$EVENT_NAME" = status
+          test "$STATUS_CONTEXT" = circus/artifacts
+          test "$STATUS_STATE" = success
+          test "$STATUS_SHA" = "$GITHUB_SHA"
       - uses: actions/checkout@v7
+        if: ${{ !inputs.circus-cache-only }}
       - uses: pschmitt/ci-workflows/.github/actions/nix-niks3@main
+        if: ${{ !inputs.circus-cache-only }}
         with:
           s3-store: ${{ secrets.s3_store }}
           s3-access-key: ${{ secrets.s3_access_key }}
           s3-secret-key: ${{ secrets.s3_secret_key }}
           extra-conf: ${{ inputs.extra-conf }}
       - name: Verify system and check options
+        if: ${{ !inputs.circus-cache-only }}
         env:
           SYSTEM: ${{ inputs.system }}
           FULL_FLAKE_CHECK: ${{ inputs.full-flake-check }}
@@ -82,6 +101,7 @@ jobs:
             exit 1
           fi
       - name: Run flake checks and collect outputs
+        if: ${{ !inputs.circus-cache-only }}
         id: checks
         env:
           SYSTEM: ${{ inputs.system }}
