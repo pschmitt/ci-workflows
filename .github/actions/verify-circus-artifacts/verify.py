@@ -41,13 +41,9 @@ def verify(env, fetch=fetch_json):
     token = env.get("GH_TOKEN", "")
     if not token:
         raise ValueError("Missing GitHub token")
-    repo = fetch(f"repos/{repository}", token)
     pr = fetch(f"repos/{repository}/pulls/{number}", token)
-    owner_id = (repo.get("owner") or {}).get("id")
     head = pr.get("head") or {}
     if not all([
-        isinstance(owner_id, int) and not isinstance(owner_id, bool) and owner_id > 0,
-        (pr.get("user") or {}).get("id") == owner_id,
         pr.get("number") == int(number),
         pr.get("state") == "open",
         pr.get("draft") is False,
@@ -56,8 +52,11 @@ def verify(env, fetch=fetch_json):
         head.get("sha") == pr_sha,
     ]):
         raise ValueError("Pull request is not trusted or its head has changed")
-    statuses = fetch(f"repos/{repository}/commits/{pr_sha}/status", token).get("statuses", [])
-    if not any(s.get("context") == "circus/pr-artifacts" and s.get("state") == "success" for s in statuses):
+    statuses = fetch(f"repos/{repository}/commits/{pr_sha}/statuses?per_page=100", token)
+    if not isinstance(statuses, list):
+        raise ValueError("Invalid GitHub status response")
+    status = next((s for s in statuses if s.get("context") == "circus/pr-artifacts"), None)
+    if not status or status.get("state") != "success" or (status.get("creator") or {}).get("login") != "circus-pschmitt[bot]":
         raise ValueError("Circus PR artifacts are not ready for this commit")
 
 

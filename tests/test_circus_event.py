@@ -18,18 +18,15 @@ class VerifyCircusTest(unittest.TestCase):
     def setUp(self):
         self.env = {"GITHUB_SHA": "c" * 40, "GITHUB_REPOSITORY": REPO, "GH_TOKEN": "not-a-real-token",
                     "GITHUB_REF": "refs/heads/main", "EVENT_NAME": "workflow_dispatch", "PR_NUMBER": "42", "PR_SHA": SHA}
-        self.repo = {"owner": {"id": 123}}
         self.pr = {"number": 42, "state": "open", "draft": False, "user": {"id": 123},
                    "base": {"ref": "main"}, "head": {"sha": SHA, "repo": {"full_name": REPO}}}
-        self.status = {"statuses": [{"context": "circus/pr-artifacts", "state": "success"}]}
+        self.status = [{"context": "circus/pr-artifacts", "state": "success", "creator": {"login": "circus-pschmitt[bot]"}}]
 
     def fetch(self, path, token):
         self.assertEqual(token, "not-a-real-token")
-        if path == f"repos/{REPO}":
-            return self.repo
         if path == f"repos/{REPO}/pulls/42":
             return self.pr
-        if path == f"repos/{REPO}/commits/{SHA}/status":
+        if path == f"repos/{REPO}/commits/{SHA}/statuses?per_page=100":
             return self.status
         raise AssertionError(path)
 
@@ -45,7 +42,7 @@ class VerifyCircusTest(unittest.TestCase):
         verify_circus.verify(self.env, self.fetch)
 
     def test_untrusted_or_changed_pr_is_rejected(self):
-        for field, value in [("user", {"id": 456}), ("state", "closed"), ("draft", True),
+        for field, value in [("state", "closed"), ("draft", True),
                              ("base", {"ref": "other"}),
                              ("head", {"sha": SHA, "repo": {"full_name": "foreign/project"}}),
                              ("head", {"sha": "b" * 40, "repo": {"full_name": REPO}})]:
@@ -56,8 +53,9 @@ class VerifyCircusTest(unittest.TestCase):
             self.pr[field] = original
 
     def test_missing_or_wrong_pr_status_is_rejected(self):
-        for status in [{"statuses": []}, {"statuses": [{"context": "circus/pr-artifacts", "state": "pending"}]},
-                       {"statuses": [{"context": "circus/artifacts", "state": "success"}]}]:
+        for status in [[], [{"context": "circus/pr-artifacts", "state": "pending"}],
+                       [{"context": "circus/artifacts", "state": "success"}],
+                       [{"context": "circus/pr-artifacts", "state": "success", "creator": {"login": "other"}}]]:
             self.status = status
             with self.subTest(status=status), self.assertRaises(ValueError):
                 verify_circus.verify(self.env, self.fetch)
@@ -66,6 +64,11 @@ class VerifyCircusTest(unittest.TestCase):
         for change in [{"PR_SHA": "invalid"}, {"PR_NUMBER": "0"}, {"EVENT_NAME": "pull_request"}, {"GITHUB_REF": "refs/heads/feature"}]:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 verify_circus.verify(self.env | change, lambda *_: self.fail("unexpected network request"))
+
+    def test_latest_failed_status_cannot_be_overridden_by_older_success(self):
+        self.status = [{"context": "circus/pr-artifacts", "state": "failure", "creator": {"login": "circus-pschmitt[bot]"}}, *self.status]
+        with self.assertRaises(ValueError):
+            verify_circus.verify(self.env, self.fetch)
 
     def test_public_metadata_falls_back_when_token_lacks_scope(self):
         error = HTTPError("https://api.github.com/test", 403, "forbidden", {}, None)
