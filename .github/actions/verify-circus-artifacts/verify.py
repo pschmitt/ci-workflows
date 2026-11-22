@@ -35,7 +35,8 @@ def verify(env, fetch=fetch_json):
             raise ValueError("The main Circus artifact status does not match")
         return
     number = env.get("PR_NUMBER", "")
-    if env.get("EVENT_NAME") != "workflow_dispatch" or not re.fullmatch(r"[1-9][0-9]*", number) or env.get("PR_SHA") != sha:
+    pr_sha = env.get("PR_SHA", "")
+    if env.get("EVENT_NAME") != "workflow_dispatch" or env.get("GITHUB_REF") != "refs/heads/main" or not re.fullmatch(r"[1-9][0-9]*", number) or not re.fullmatch(r"[0-9a-f]{40}", pr_sha):
         raise ValueError("Invalid Circus pull request dispatch")
     token = env.get("GH_TOKEN", "")
     if not token:
@@ -52,10 +53,10 @@ def verify(env, fetch=fetch_json):
         pr.get("draft") is False,
         (pr.get("base") or {}).get("ref") == "main",
         (head.get("repo") or {}).get("full_name") == repository,
-        head.get("sha") == sha,
+        head.get("sha") == pr_sha,
     ]):
         raise ValueError("Pull request is not trusted or its head has changed")
-    statuses = fetch(f"repos/{repository}/commits/{sha}/status", token).get("statuses", [])
+    statuses = fetch(f"repos/{repository}/commits/{pr_sha}/status", token).get("statuses", [])
     if not any(s.get("context") == "circus/pr-artifacts" and s.get("state") == "success" for s in statuses):
         raise ValueError("Circus PR artifacts are not ready for this commit")
 

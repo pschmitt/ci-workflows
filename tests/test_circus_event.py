@@ -16,8 +16,8 @@ REPO = "owner/project"
 
 class VerifyCircusTest(unittest.TestCase):
     def setUp(self):
-        self.env = {"GITHUB_SHA": SHA, "GITHUB_REPOSITORY": REPO, "GH_TOKEN": "not-a-real-token",
-                    "EVENT_NAME": "workflow_dispatch", "PR_NUMBER": "42", "PR_SHA": SHA}
+        self.env = {"GITHUB_SHA": "c" * 40, "GITHUB_REPOSITORY": REPO, "GH_TOKEN": "not-a-real-token",
+                    "GITHUB_REF": "refs/heads/main", "EVENT_NAME": "workflow_dispatch", "PR_NUMBER": "42", "PR_SHA": SHA}
         self.repo = {"owner": {"id": 123}}
         self.pr = {"number": 42, "state": "open", "draft": False, "user": {"id": 123},
                    "base": {"ref": "main"}, "head": {"sha": SHA, "repo": {"full_name": REPO}}}
@@ -34,7 +34,7 @@ class VerifyCircusTest(unittest.TestCase):
         raise AssertionError(path)
 
     def test_main_status_must_match_source_and_context(self):
-        env = self.env | {"EVENT_NAME": "status", "PR_NUMBER": "", "PR_SHA": "",
+        env = self.env | {"GITHUB_SHA": SHA, "EVENT_NAME": "status", "PR_NUMBER": "", "PR_SHA": "",
                           "STATUS_CONTEXT": "circus/artifacts", "STATUS_STATE": "success", "STATUS_SHA": SHA}
         verify_circus.verify(env, self.fetch)
         for change in [{"STATUS_SHA": "b" * 40}, {"STATUS_STATE": "pending"}, {"STATUS_CONTEXT": "other"}]:
@@ -63,7 +63,7 @@ class VerifyCircusTest(unittest.TestCase):
                 verify_circus.verify(self.env, self.fetch)
 
     def test_wrong_dispatch_identity_rejected_before_network(self):
-        for change in [{"PR_SHA": "b" * 40}, {"PR_NUMBER": "0"}, {"EVENT_NAME": "pull_request"}]:
+        for change in [{"PR_SHA": "invalid"}, {"PR_NUMBER": "0"}, {"EVENT_NAME": "pull_request"}, {"GITHUB_REF": "refs/heads/feature"}]:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 verify_circus.verify(self.env | change, lambda *_: self.fail("unexpected network request"))
 
