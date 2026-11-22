@@ -1,0 +1,24 @@
+name: Verify Circus artifacts
+description: Verify a main-branch status or trusted PR dispatch before using cached artifacts.
+inputs:
+  pr-number:
+    description: Pull request number for a trusted Circus PR dispatch
+    required: false
+    default: ""
+  pr-sha:
+    description: Exact pull request head SHA for a trusted Circus PR dispatch
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        STATUS_CONTEXT: ${{ github.event.context }}
+        STATUS_STATE: ${{ github.event.state }}
+        STATUS_SHA: ${{ github.event.sha }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_SHA: ${{ inputs.pr-sha }}
+        GH_TOKEN: ${{ github.token }}
+      run: python3 "$GITHUB_ACTION_PATH/verify.py"

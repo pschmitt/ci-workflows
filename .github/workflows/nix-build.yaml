@@ -48,6 +48,14 @@ on:
         description: Fetch Circus-published outputs without building them
         type: boolean
         default: false
+      circus-pr-number:
+        description: Trusted Circus PR number for an artifact dispatch
+        type: string
+        default: ""
+      circus-pr-sha:
+        description: Exact trusted Circus PR head SHA
+        type: string
+        default: ""
     secrets:
       s3_store:
         description: Niks3 S3 store URL
@@ -71,16 +79,10 @@ jobs:
     steps:
       - name: Verify the Circus artifact event
         if: ${{ inputs.circus-cache-only }}
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          STATUS_CONTEXT: ${{ github.event.context }}
-          STATUS_STATE: ${{ github.event.state }}
-          STATUS_SHA: ${{ github.event.sha }}
-        run: |
-          test "$EVENT_NAME" = status
-          test "$STATUS_CONTEXT" = circus/artifacts
-          test "$STATUS_STATE" = success
-          test "$STATUS_SHA" = "$GITHUB_SHA"
+        uses: pschmitt/ci-workflows/.github/actions/verify-circus-artifacts@main
+        with:
+          pr-number: ${{ inputs.circus-pr-number }}
+          pr-sha: ${{ inputs.circus-pr-sha }}
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
