@@ -44,7 +44,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: pschmitt/ci-workflows/.github/actions/nix-setup@main
 
       - name: Align @playwright/test with nixpkgs
         if: inputs.playwright-dir != ''

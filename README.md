@@ -76,6 +76,9 @@ The caller performs checkout and can supply `SHELLCHECK_OPTS` in its environment
 
 ## Nix
 
+Install upstream Nix with `pschmitt/ci-workflows/.github/actions/nix-setup@main`.
+Pass additional `nix.conf` lines through the optional `extra-conf` input.
+
 `nix-flake-lock.yaml` updates `flake.lock` and opens an update pull request.
 The caller owns the schedule and manual trigger and must grant `contents: write`
 and `pull-requests: write`. The workflow uses the default GitHub token.

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: pschmitt/ci-workflows/.github/actions/nix-setup@main
       - name: Install statix
         run: |
           inputs=()
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: pschmitt/ci-workflows/.github/actions/nix-setup@main
       - name: Install deadnix
         run: |
           inputs=()
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: pschmitt/ci-workflows/.github/actions/nix-setup@main
       - name: Install nixfmt
         run: |
           inputs=()
