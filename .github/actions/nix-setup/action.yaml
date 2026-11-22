@@ -5,9 +5,19 @@ inputs:
     description: Additional nix.conf lines
     required: false
     default: ""
+  github-access-token:
+    description: GitHub token for private flake inputs or custom access
+    required: false
+    default: ""
+  nix-path:
+    description: NIX_PATH for commands that use channels
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
     - uses: cachix/install-nix-action@v31
       with:
         extra_nix_config: ${{ inputs.extra-conf }}
+        github_access_token: ${{ inputs.github-access-token }}
+        nix_path: ${{ inputs.nix-path }}
