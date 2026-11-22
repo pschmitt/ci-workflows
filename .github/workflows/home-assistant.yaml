@@ -13,21 +13,9 @@ permissions:
 
 jobs:
   hassfest:
-    name: Hassfest
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: home-assistant/actions/hassfest@master
+    uses: ./.github/workflows/home-assistant-hassfest.yaml
 
   ruff:
-    name: Ruff
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: pschmitt/ci-workflows/.github/actions/homeassistant-ruff-v10@main
-        with:
-          path: ${{ inputs.lint-path }}
+    uses: ./.github/workflows/home-assistant-ruff.yaml
+    with:
+      lint-path: ${{ inputs.lint-path }}

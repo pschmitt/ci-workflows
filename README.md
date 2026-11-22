@@ -11,6 +11,8 @@ and [bruvtab](https://github.com/pschmitt/bruvtab).
 | `pin-release.yaml` | Writes the release assets' version and SHA-256 to `browser/packages/metadata.json` on the default branch; the Nix packages fetch the assets by those hashes. |
 | `verify-pin.yaml` | CI check: the pinned assets match their hashes and the pinned tag's source. |
 | `home-assistant.yaml` | Hassfest and Ruff for Home Assistant integrations. Use `lint-path` to scope Ruff in a repository with other Python code. The caller owns the triggers. |
+| `home-assistant-hassfest.yaml` | Hassfest alone, for callers with separate lint or test jobs. Use `integration-root` when `custom_components/` is nested. |
+| `home-assistant-ruff.yaml` | Ruff alone, for callers with custom Hassfest checks. |
 | `rust-lint.yaml` | rustfmt, clippy (`-D warnings`) and optionally cargo-deny. |
 | `extension-lint.yaml` | Builds the extension, runs the repository's checks and `web-ext lint`. |
 | `nix-lint.yaml` | statix, deadnix and nixfmt over every tracked Nix file, with the linters from the caller's locked nixpkgs. The caller owns the triggers and should run on `**.nix` and `flake.lock`. |

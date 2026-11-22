@@ -1,0 +1,41 @@
+name: Validate Home Assistant integration with Hassfest
+
+on:
+  workflow_call:
+    inputs:
+      integration-root:
+        description: Directory containing custom_components, relative to the checkout
+        type: string
+        default: '.'
+      legacy-action:
+        description: Keep the Hassfest action revision used by older pinned callers
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  hassfest:
+    name: Hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: home-assistant/actions/hassfest@master
+        if: inputs.integration-root == '.' && !inputs.legacy-action
+      - uses: home-assistant/actions/hassfest@e3fb68ebda13d88a0d695082f471ba2c83d025fb
+        if: inputs.integration-root == '.' && inputs.legacy-action
+      - name: Validate a nested integration
+        if: inputs.integration-root != '.'
+        env:
+          INTEGRATION_ROOT: ${{ inputs.integration-root }}
+        run: |
+          root=$(realpath -- "$INTEGRATION_ROOT")
+          case "$root/" in
+            "$GITHUB_WORKSPACE/"*) ;;
+            *) echo "Integration must be inside the checkout" >&2; exit 1 ;;
+          esac
+          test -d "$root/custom_components"
+          docker run --rm --volume "$root:/github/workspace" ghcr.io/home-assistant/hassfest

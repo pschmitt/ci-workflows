@@ -1,0 +1,31 @@
+name: Lint Home Assistant integration with Ruff
+
+on:
+  workflow_call:
+    inputs:
+      lint-path:
+        description: Workspace-relative path for Ruff
+        type: string
+        default: '.'
+      uv-v5:
+        description: Keep the setup-uv v5 version for existing callers
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pschmitt/ci-workflows/.github/actions/homeassistant-ruff-v5@main
+        if: inputs.uv-v5
+      - uses: pschmitt/ci-workflows/.github/actions/homeassistant-ruff-v10@main
+        if: '!inputs.uv-v5'
+        with:
+          path: ${{ inputs.lint-path }}
