@@ -8,7 +8,7 @@ on:
         type: string
         default: '.'
       uv-v5:
-        description: Keep the setup-uv v5 version for existing callers
+        description: Use the legacy v5-named Ruff action for existing callers
         type: boolean
         default: false
 

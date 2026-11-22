@@ -7,7 +7,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: astral-sh/setup-uv@v5
+    - uses: astral-sh/setup-uv@v10.3.3
     - run: |
         uvx ruff check -- "$RUFF_PATH"
         uvx ruff format --check -- "$RUFF_PATH"
