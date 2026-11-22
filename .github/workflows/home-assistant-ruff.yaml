@@ -25,6 +25,8 @@ jobs:
           persist-credentials: false
       - uses: pschmitt/ci-workflows/.github/actions/homeassistant-ruff-v5@main
         if: inputs.uv-v5
+        with:
+          path: ${{ inputs.lint-path }}
       - uses: pschmitt/ci-workflows/.github/actions/homeassistant-ruff-v10@main
         if: '!inputs.uv-v5'
         with:
