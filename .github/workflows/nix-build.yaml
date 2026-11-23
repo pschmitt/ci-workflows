@@ -126,7 +126,7 @@ jobs:
       - name: Create producer source metadata
         if: ${{ inputs.producer-metadata-artifact != '' }}
         env:
-          GITHUB_SHA: ${{ inputs.circus-cache-only && inputs.circus-pr-number != '' && inputs.circus-pr-sha || github.sha }}
+          PRODUCER_SOURCE_SHA: ${{ inputs.circus-cache-only && inputs.circus-pr-number != '' && inputs.circus-pr-sha || github.sha }}
         run: |
           python3 .ci-workflows/scripts/nix-producer-metadata.py "$RUNNER_TEMP/nix-producer.json"
       - name: Upload producer source metadata

@@ -15,7 +15,7 @@ def fail(message: str) -> "None":
 
 
 sha_pattern = re.compile(r"[0-9a-f]{40}")
-source_sha = os.environ.get("GITHUB_SHA", "")
+source_sha = os.environ.get("PRODUCER_SOURCE_SHA", os.environ.get("GITHUB_SHA", ""))
 if not sha_pattern.fullmatch(source_sha):
     fail("Invalid workflow source revision.")
 
