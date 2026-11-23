@@ -49,5 +49,38 @@ wait_for_circus deadbeef
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
+class WorkflowGateTest(unittest.TestCase):
+    def wait(self, runs):
+        script = r'''
+source "$1"
+gh() { printf '%s\n' "$TEST_RUNS"; }
+sleep() { exit 42; }
+wait_for_workflow deadbeef build
+'''
+        return subprocess.run(
+            ["bash", "-c", script, "test", str(SCRIPT)],
+            env={**os.environ, "TEST_RUNS": runs},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_finished_runs_pass(self):
+        result = self.wait("1\tcompleted\tsuccess\n2\tcompleted\tsuccess")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_unfinished_or_missing_runs_wait(self):
+        # A run that is queued, running, or not created yet keeps the gate
+        # waiting; its empty conclusion must never read as a failure.
+        for runs in ("", "1\tqueued\t", "1\tcompleted\tsuccess\n2\tin_progress\t"):
+            with self.subTest(runs=runs):
+                self.assertEqual(self.wait(runs).returncode, 42)
+
+    def test_failed_run_blocks(self):
+        result = self.wait("1\tcompleted\tfailure")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("did not succeed", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

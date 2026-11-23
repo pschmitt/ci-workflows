@@ -8,9 +8,10 @@
 # with the build artifacts and pins the signed packages' hashes in
 # browser/packages/metadata.json on main.
 #
-# This file is shared: the canonical copy lives in pschmitt/ci-workflows
-# (scripts/release.sh) and is copied verbatim to tools/release.sh in each
-# repository. Project specifics go into tools/release-hooks.sh, which may define
+# Repositories run it from pschmitt/ci-workflows (scripts/release.sh) with
+# `nix run github:pschmitt/ci-workflows#release -- prepare VERSION | tag`
+# instead of keeping a copy. Project specifics go into tools/release-hooks.sh,
+# which may define
 #   current_version       print the current version
 #   bump_version VERSION  write VERSION into the version files
 #   release_files         print the files the release commit contains
@@ -18,7 +19,7 @@
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") prepare VERSION | tag
+Usage: nix run github:pschmitt/ci-workflows#release -- prepare VERSION | tag
 
   prepare VERSION  Bump to VERSION (X.Y.Z), date the changelog, commit and push.
   tag              Push the GPG-signed vVERSION tag once CI (build, lint, test and
@@ -106,22 +107,23 @@ run_only_lost_optional_jobs() {
 # Wait until every run of WORKFLOW for COMMIT has finished; succeed only if all
 # passed, or lost nothing but cancelled optional jobs.
 wait_for_workflow() {
-  local commit="$1" workflow="$2" pending runs
+  local commit="$1" workflow="$2" runs
   while true
   do
-    pending="$(gh run list --commit "$commit" --workflow "$workflow" --json status \
-      -q '[.[] | select(.status != "completed")] | length' 2>/dev/null)"
-    runs="$(gh run list --commit "$commit" --workflow "$workflow" --json databaseId,conclusion \
-      -q '.[] | [.databaseId, .conclusion] | @tsv' 2>/dev/null)"
-    if [[ "$pending" == 0 && -n "$runs" ]]
+    # One query for both status and conclusion: two separate ones raced a
+    # run created in between, whose empty conclusion then read as a failure.
+    runs="$(gh run list --commit "$commit" --workflow "$workflow" \
+      --json databaseId,status,conclusion \
+      -q '.[] | [.databaseId, .status, .conclusion] | @tsv' 2>/dev/null)"
+    if [[ -n "$runs" ]] && ! cut -f2 <<< "$runs" | grep -qvx completed
     then
       break
     fi
     printf 'Waiting for %s on %s…\n' "$workflow" "${commit:0:7}" >&2
     sleep 30
   done
-  local run_id conclusion tolerated
-  while IFS=$'\t' read -r run_id conclusion
+  local run_id status conclusion tolerated
+  while IFS=$'\t' read -r run_id status conclusion
   do
     [[ "$conclusion" == success ]] && continue
     if tolerated="$(run_only_lost_optional_jobs "$run_id")" && [[ -n "$tolerated" ]]

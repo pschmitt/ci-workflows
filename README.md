@@ -22,13 +22,20 @@ and [bruvtab](https://github.com/pschmitt/bruvtab).
 | `nix-consumer-build.yaml` | Builds the given flake attributes (`packages`) with a consumer flake's nixpkgs pin (`consumer`, default `pschmitt/nixos-config`, read from its `flake.lock` on `consumer-ref`) and pins them in niks3 as `<pin-prefix>-<n>`. For a consumer that makes this flake's nixpkgs follow its own: their store paths differ from those of the caller's lock, so without it the consumer compiles them itself. Call it on pushes to main; needs `id-token: write`, `NIKS3_SERVER_URL` and the read-only S3 secrets like `nix-aarch64.yaml`. |
 | `nix-image.yaml` | Loads a same-run Nix `dockerTools` image artifact or builds a flake image output, runs an optional caller test script, then optionally publishes the verified image to GHCR. |
 | `nix-hash-fixup.yaml` | On a dependency-update pull request (Renovate), refreshes the fixed-output hashes of the given flake `packages` with `nix-update --version=skip` (npmDepsHash, cargoHash, vendorHash, ...) and commits them to the pull request branch. With `playwright-dir`, it first pins that package's `@playwright/test` to the flake's nixpkgs `playwright-driver` version. It pushes as the `pschmitt-ci` GitHub App (secrets `app_id`, `app_private_key`; the app needs Contents read & write on the repository) so the pull request's checks run again; forks are skipped. Callers trigger it on `pull_request` for their lockfiles and list the bot (`<id>+pschmitt-ci[bot]@users.noreply.github.com`) in Renovate's `gitIgnoredAuthors`. Logo: `docs/pschmitt-ci.svg`. |
-| `release-script.yaml` | Fails when `tools/release.sh` differs from `scripts/release.sh` here. |
+| `release-script.yaml` | Deprecated: compared a vendored `tools/release.sh` with `scripts/release.sh`. Run the release tool with `nix run` instead. |
 | `github-release.yaml` | Generates changelog text from the previous tag and creates a GitHub release. `dry-run: true` validates changelog generation without creating the release. |
 
 `scripts/verify-extension.py` is the check both signing and verification use.
-`scripts/release.sh` is the release tool (`prepare VERSION`, `tag`); each repository
-carries a verbatim copy in `tools/release.sh` and, if its version lives somewhere
-other than `Cargo.toml`, a `tools/release-hooks.sh`.
+`scripts/release.sh` is the release tool (`prepare VERSION`, `tag`). Repositories
+run it from here rather than keeping a copy, typically from their `justfile`:
+
+```shell
+nix run github:pschmitt/ci-workflows#release -- prepare X.Y.Z
+nix run github:pschmitt/ci-workflows#release -- tag
+```
+
+It follows `main`, like the reusable workflows. A repository whose version lives
+somewhere other than `Cargo.toml` adds a `tools/release-hooks.sh`.
 Callers reference these with `uses: pschmitt/ci-workflows/.github/workflows/<name>.yaml@main`.
 Keep tag-push and manual-dispatch triggers in each caller; set the reusable
 workflow's `dry-run` input to `true` for a safe manual validation.
