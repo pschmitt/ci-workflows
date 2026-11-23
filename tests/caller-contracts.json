@@ -31,13 +31,6 @@
     }
   },
   {
-    "caller": "browser-daemon/.github/workflows/lint.yaml",
-    "context": "jobs.release-script",
-    "component": "release-script.yaml",
-    "kind": "workflow",
-    "with": {}
-  },
-  {
     "caller": "browser-daemon/.github/workflows/release.yaml",
     "context": "jobs.browser-extensions",
     "component": "sign-extension.yaml",
@@ -91,13 +84,6 @@
       "build-command": "string",
       "firefox-dir": "string"
     }
-  },
-  {
-    "caller": "bruvtab/.github/workflows/lint.yaml",
-    "context": "jobs.release-script",
-    "component": "release-script.yaml",
-    "kind": "workflow",
-    "with": {}
   },
   {
     "caller": "bruvtab/.github/workflows/release.yaml",
@@ -235,13 +221,6 @@
     "with": {
       "check-command": "string"
     }
-  },
-  {
-    "caller": "rbw/.github/workflows/lint.yaml",
-    "context": "jobs.release-script",
-    "component": "release-script.yaml",
-    "kind": "workflow",
-    "with": {}
   },
   {
     "caller": "rbw/.github/workflows/release.yaml",
