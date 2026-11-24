@@ -277,16 +277,35 @@ tag() {
 }
 
 main() {
-  load_hooks
+  local arg
+  # Help wins wherever it is (`tag --help` must never tag).
+  for arg in "$@"
+  do
+    case "$arg" in
+      -h|--help)
+        usage
+        return 0
+        ;;
+    esac
+  done
   case "${1:-}" in
-    -h|--help)
-      usage
-      return 0
-      ;;
     prepare)
-      prepare "${2:-}"
+      if [[ $# -ne 2 ]]
+      then
+        usage >&2
+        return 2
+      fi
+      load_hooks
+      prepare "$2"
       ;;
     tag)
+      if [[ $# -ne 1 ]]
+      then
+        printf 'tag takes no arguments: %s\n' "${*:2}" >&2
+        usage >&2
+        return 2
+      fi
+      load_hooks
       tag
       ;;
     *)
