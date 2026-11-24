@@ -1,7 +1,9 @@
 # Sign a repository's browser extension for a version tag: Firefox through AMO
 # (unlisted) and Chromium as a CRX3 with a stable key. AMO signs a version only
 # once, so a run first reuses the signed packages already attached to the tag's
-# release (when they match the source) and only signs what is missing.
+# release (when they match the source) and only signs what is missing; when AMO
+# already has the version (an earlier run lost its connection), its signed file
+# is downloaded instead (scripts/amo-fetch-signed.py).
 #
 # The caller provides a build command that writes the unpacked extensions to
 # `firefox-dir` and `chromium-dir`, and receives a `browser-extensions`
@@ -96,10 +98,21 @@ jobs:
           WEB_EXT_API_SECRET: ${{ secrets.amo_api_secret }}
           FIREFOX_DIR: ${{ inputs.firefox-dir }}
         run: |
+          set -euo pipefail
           npm install --global web-ext@10
-          web-ext sign --channel=unlisted --source-dir="$FIREFOX_DIR" --artifacts-dir="$RUNNER_TEMP/signed-firefox"
           mkdir -p "$SIGNED"
-          cp "$RUNNER_TEMP"/signed-firefox/*.xpi "$SIGNED/firefox.xpi"
+          log="$RUNNER_TEMP/web-ext-sign.log"
+          if web-ext sign --channel=unlisted --source-dir="$FIREFOX_DIR" --artifacts-dir="$RUNNER_TEMP/signed-firefox" 2>&1 | tee "$log"
+          then
+            cp "$RUNNER_TEMP"/signed-firefox/*.xpi "$SIGNED/firefox.xpi"
+          elif grep -q 'already exists' "$log"
+          then
+            # An earlier run uploaded this version (AMO signs it only once):
+            # take AMO's signed file; the verify step checks it.
+            python3 .ci/scripts/amo-fetch-signed.py --source-dir "$FIREFOX_DIR" --out "$SIGNED/firefox.xpi"
+          else
+            exit 1
+          fi
       - uses: browser-actions/setup-chrome@v2
         if: steps.reuse.outcome == 'failure' && inputs.sign
       - name: Sign Chromium CRX3
