@@ -28,6 +28,10 @@ Usage: nix run github:pschmitt/ci-workflows#release -- prepare VERSION | tag
                    Cancelled jobs matching \$RELEASE_OPTIONAL_JOBS (an extended
                    regex, default "macos") do not count as failures.
                    The release workflow then signs and publishes.
+
+prepare refuses while dependency PRs (Renovate, Dependabot, flake updates)
+are open: merge them first, or set RELEASE_SKIP_PRS="#12 #34" to name the
+ones deliberately left out (RELEASE_SKIP_PRS=all skips the check).
 EOF
 }
 
@@ -221,6 +225,28 @@ wait_for_circus() {
   done
 }
 
+# Dependency PRs belong in a release: refuse while any is open, except those
+# named in $RELEASE_SKIP_PRS ("#12 #34", or "all").
+open_dependency_prs() {
+  local prs number title left=""
+  [[ "${RELEASE_SKIP_PRS:-}" == all ]] && return 0
+  if ! prs="$(gh pr list --state open --limit 100 --json number,title,author \
+    --jq '.[] | select(.author.login | test("renovate|dependabot|github-actions")) | [.number, .title] | @tsv')"
+  then
+    die "Could not list open pull requests (set RELEASE_SKIP_PRS=all to skip)"
+    return 1
+  fi
+  while IFS=$'\t' read -r number title
+  do
+    [[ -n "$number" ]] || continue
+    [[ " ${RELEASE_SKIP_PRS:-} " == *" #$number "* ]] && continue
+    left+="  #$number $title"$'\n'
+  done <<< "$prs"
+  [[ -z "$left" ]] && return 0
+  die "Open dependency PRs; merge them before releasing, or name the ones left out in RELEASE_SKIP_PRS:"$'\n'"${left%$'\n'}"
+  return 1
+}
+
 prepare() {
   local version="$1" root today file
   local -a files=()
@@ -232,6 +258,7 @@ prepare() {
   fi
   root="$(repo_root)"
   today="$(date +%F)"
+  open_dependency_prs || return 1
   if ! grep -qx '## \[Unreleased\]' "$root/CHANGELOG.md"
   then
     die "CHANGELOG.md has no '## [Unreleased]' section"

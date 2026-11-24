@@ -42,6 +42,9 @@ workflow's `dry-run` input to `true` for a safe manual validation.
 Repositories with `nixbot.toml` also wait for successful Circus `main` and
 `main-arm` jobsets on the exact commit. Set `RELEASE_CIRCUS_JOBSETS` to select
 different jobsets, or `RELEASE_NIX_CI=nixbot` for a repository still on nixbot.
+`prepare` refuses while dependency PRs (Renovate, Dependabot, flake updates)
+are open; name deliberately skipped ones in `RELEASE_SKIP_PRS` (`"#12 #34"`, or
+`all`).
 A cancelled job whose name matches `RELEASE_OPTIONAL_JOBS` (an extended regex,
 default `macos`) does not block the tag: scarce macOS runners get cancelled before
 they start, which says nothing about the code. Failed jobs always block.
