@@ -77,6 +77,10 @@ jobs:
         run: |
           set -euo pipefail
           for package in $PACKAGES; do
+            # nix-update reads the store path that `nix flake metadata` reports,
+            # but Nix does not necessarily copy the source there. Archive before
+            # each package: a refreshed hash changes the source.
+            nix flake archive
             nix run --inputs-from . nixpkgs#nix-update -- \
               --flake --version=skip "$package"
           done
