@@ -170,10 +170,13 @@ in
         echo "Java version: $(java -version 2>&1 | head -n1)"
         echo "Available commands: ./gradlew, adb, aapt2, just, ktfmt"
         echo ""
-        # ANDROID_REMOTE_HOST names the remote build host (set outside this public repository).
-        if [ -z "''${ANDROID_REMOTE_HOST:-}" ] || [ "$(hostname)" != "''${ANDROID_REMOTE_HOST%%.*}" ]; then
+        # The remote build host comes from the private Android dev config (see
+        # scripts/android-dev-env), not from this public repository.
+        android_dev_config="''${ANDROID_DEV_CONFIG:-''${XDG_CONFIG_HOME:-$HOME/.config}/android-dev/env}"
+        remote_host="$(if [ -r "$android_dev_config" ]; then . "$android_dev_config"; fi; printf '%s' "''${ANDROID_REMOTE_HOST:-}")"
+        if [ -z "$remote_host" ] || [ "$(hostname)" != "''${remote_host%%.*}" ]; then
           echo "Don't run ./gradlew directly on this machine - see AGENTS.md."
-          echo "Use the 'just' recipes below, which build on \$ANDROID_REMOTE_HOST instead:"
+          echo "Use the 'just' recipes below, which build on the remote build host instead:"
           echo ""
           echo "Quick start:"
           echo "  just build                    # Build debug APK on the remote build host"

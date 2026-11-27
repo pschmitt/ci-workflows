@@ -240,7 +240,7 @@ jobs:
   imports it, including multi-module jollyfin.
 - **`single-module.just`** - the full remote build/deploy pipeline: `sync`/`gradle`/`build`/
   `fetch`/`build-fetch`/`clean`/`lint`/`test` plus the `zenfone-*`/`mipad-*`/`px5-*`/`deploy-all`
-  device recipes, parameterized for the remote-build convention (`ANDROID_REMOTE_HOST`), the
+  device recipes, parameterized for the remote-build convention (`ANDROID_REMOTE_HOST` and the device settings come from the private config read by `scripts/android-dev-env`), the
   worktree-suffix trick, per-app release signing (or none), and ABI-split-vs-universal APKs.
   Imported by the 3 single-Gradle-module apps (nyetbox, augh, syncwich) - jollyfin is multi-module
   (`app/phone` + `app/tv`) and keeps its own local versions, since `build`/`fetch`/`deploy-*` need

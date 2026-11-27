@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+# Print one setting of the private Android development config, for example the
+# remote build host or a test device serial. The config is a shell file of
+# KEY=value lines outside the public repositories:
+#   ${ANDROID_DEV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/android-dev/env}
+# An environment variable of the same name wins over the file. A missing file
+# or setting prints nothing.
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") NAME
+
+Print the value of NAME from the environment or the Android dev config.
+EOF
+}
+
+config_path() {
+  printf '%s\n' "${ANDROID_DEV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/android-dev/env}"
+}
+
+main() {
+  case "${1:-}" in
+    -h|--help)
+      usage
+      return 0
+      ;;
+    "")
+      usage >&2
+      return 2
+      ;;
+  esac
+
+  local name="$1"
+  if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
+  then
+    printf 'Invalid setting name: %s\n' "$name" >&2
+    return 2
+  fi
+
+  if [[ -n "${!name:-}" ]]
+  then
+    printf '%s' "${!name}"
+    return 0
+  fi
+
+  local config
+  config="$(config_path)"
+  if [[ -r "$config" ]]
+  then
+    # shellcheck source=/dev/null
+    source "$config" || return 1
+  fi
+  printf '%s' "${!name:-}"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]
+then
+  main "$@"
+fi
+
+# vim: set ft=sh et ts=2 sw=2 :
