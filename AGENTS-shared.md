@@ -37,8 +37,8 @@ physical device it has no recipes for) don't apply to it; its own `AGENTS.md` sa
 
 ## Builds
 
-- **Never run Gradle builds locally on this machine** - always build on `rofl-13.brkn.lol` or
-  `rofl-14.brkn.lol` instead (see the app's own `justfile`/`AGENTS.md` for its exact recipe names
+- **Never run Gradle builds locally on this machine** - always build on the remote build host
+  (`$ANDROID_REMOTE_HOST`) instead (see the app's own `justfile`/`AGENTS.md` for its exact recipe names
   and any module-specific flags).
 - **CI is the sole authority on lint/format, full stop - not `just lint`, not `just format`, not
   local judgment.** Confirmed the hard way more than once: a change that passed a local/remote

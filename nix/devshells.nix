@@ -28,7 +28,7 @@
 #     extraPackages = [ nyetboxSetup ];
 #     screenshotsSystemImage = "system-images-android-34-google-apis-x86-64"; # null to skip
 #     quickStart = ''
-#       echo "  just build                    # Build debug APK on rofl-13"
+#       echo "  just build                    # Build debug APK on the remote build host"
 #     '';
 #   };
 #
@@ -170,12 +170,13 @@ in
         echo "Java version: $(java -version 2>&1 | head -n1)"
         echo "Available commands: ./gradlew, adb, aapt2, just, ktfmt"
         echo ""
-        if [ "$(hostname)" != "rofl-13" ] && [ "$(hostname)" != "rofl-14" ]; then
+        # ANDROID_REMOTE_HOST names the remote build host (set outside this public repository).
+        if [ -z "''${ANDROID_REMOTE_HOST:-}" ] || [ "$(hostname)" != "''${ANDROID_REMOTE_HOST%%.*}" ]; then
           echo "Don't run ./gradlew directly on this machine - see AGENTS.md."
-          echo "Use the 'just' recipes below, which build on rofl-13/rofl-14 instead:"
+          echo "Use the 'just' recipes below, which build on \$ANDROID_REMOTE_HOST instead:"
           echo ""
           echo "Quick start:"
-          echo "  just build                    # Build debug APK on rofl-13"
+          echo "  just build                    # Build debug APK on the remote build host"
           echo "  just build-fetch              # ...and copy it back to ./dist"
           echo "  just --list                   # See all available recipes"
           ${quickStart}

@@ -240,7 +240,7 @@ jobs:
   imports it, including multi-module jollyfin.
 - **`single-module.just`** - the full remote build/deploy pipeline: `sync`/`gradle`/`build`/
   `fetch`/`build-fetch`/`clean`/`lint`/`test` plus the `zenfone-*`/`mipad-*`/`px5-*`/`deploy-all`
-  device recipes, parameterized for the `rofl-13`/`rofl-14` remote-build convention, the
+  device recipes, parameterized for the remote-build convention (`ANDROID_REMOTE_HOST`), the
   worktree-suffix trick, per-app release signing (or none), and ABI-split-vs-universal APKs.
   Imported by the 3 single-Gradle-module apps (nyetbox, augh, syncwich) - jollyfin is multi-module
   (`app/phone` + `app/tv`) and keeps its own local versions, since `build`/`fetch`/`deploy-*` need
@@ -262,7 +262,7 @@ the new gitlink when adopting a change. Multi-module apps can import only
 ## Nix (`nix/devshells.nix`)
 
 Wired into all 4 apps' `flake.nix` (as a `flake = false` input, `import`ed directly - see the file
-'s own doc comment for the exact call shape). Validated end-to-end on rofl-13 for all 4:
+'s own doc comment for the exact call shape). Validated end-to-end on the remote build host for all 4:
 `nix flake check` and actually entering every devShell (`default`, plus `screenshots` where
 applicable) both work.
 

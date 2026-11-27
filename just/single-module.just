@@ -23,7 +23,7 @@
 #                              this shared file; harmless to define even for an app that's never
 #                              actually deployed to one of them
 
-# --- Remote build (rofl-13 / rofl-14) ---------------------------------------
+# --- Remote build (remote_host, from the app's justfile or ANDROID_REMOTE_HOST) ----------
 
 # Sync the working tree to the remote build host (excludes .git/build/.gradle). The .git exclude
 # has no trailing slash so it matches both a real .git/ directory (the main checkout) and a plain
@@ -221,7 +221,7 @@ deploy-mipad variant="debug":
     just build-fetch {{ variant }}
     just mipad-install "{{ local_dist }}/app{{ if default_abi != '' { '-' + default_abi } else { '' } }}-{{ variant }}.apk"
 
-# --- Pixel 5 (px5.lan, wireless adb enabled on demand via Home Assistant/Tasker) --------------
+# --- Pixel 5 (px5_host, wireless adb enabled on demand via Home Assistant/Tasker) --------------
 
 # Enable wireless adb on the Pixel 5 (via `zhj adb::connect`, which triggers it through Home
 # Assistant/Tasker) and connect. The port is dynamic (assigned fresh each time wireless debugging
