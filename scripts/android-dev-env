@@ -3,7 +3,7 @@
 # Print one setting of the private Android development config, for example the
 # remote build host or a test device serial. The config is a shell file of
 # KEY=value lines outside the public repositories:
-#   ${ANDROID_DEV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/android-dev/env}
+#   ${ANDROID_DEV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/android/devices.env}
 # An environment variable of the same name wins over the file. A missing file
 # or setting prints nothing.
 
@@ -16,7 +16,7 @@ EOF
 }
 
 config_path() {
-  printf '%s\n' "${ANDROID_DEV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/android-dev/env}"
+  printf '%s\n' "${ANDROID_DEV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/android/devices.env}"
 }
 
 main() {

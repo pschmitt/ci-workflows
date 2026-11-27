@@ -172,7 +172,7 @@ in
         echo ""
         # The remote build host comes from the private Android dev config (see
         # scripts/android-dev-env), not from this public repository.
-        android_dev_config="''${ANDROID_DEV_CONFIG:-''${XDG_CONFIG_HOME:-$HOME/.config}/android-dev/env}"
+        android_dev_config="''${ANDROID_DEV_CONFIG:-''${XDG_CONFIG_HOME:-$HOME/.config}/android/devices.env}"
         remote_host="$(if [ -r "$android_dev_config" ]; then . "$android_dev_config"; fi; printf '%s' "''${ANDROID_REMOTE_HOST:-}")"
         if [ -z "$remote_host" ] || [ "$(hostname)" != "''${remote_host%%.*}" ]; then
           echo "Don't run ./gradlew directly on this machine - see AGENTS.md."
